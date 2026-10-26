@@ -112,25 +112,25 @@ export function SupabaseGuideModal({ isOpen, onClose }: SupabaseGuideModalProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
+        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
               <Database className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
                 Supabase & Vercel Deployment Guide
               </h2>
-              <p className="text-xs text-zinc-400">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 Step-by-step setup for full cloud sync and production deployment
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -143,7 +143,7 @@ export function SupabaseGuideModal({ isOpen, onClose }: SupabaseGuideModalProps)
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors ${
               activeTab === 'supabase'
                 ? 'bg-emerald-600 text-white shadow-md'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white border border-zinc-200 dark:border-zinc-800'
             }`}
           >
             <Database className="h-3.5 w-3.5" />
@@ -155,7 +155,7 @@ export function SupabaseGuideModal({ isOpen, onClose }: SupabaseGuideModalProps)
             className={`flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-colors ${
               activeTab === 'vercel'
                 ? 'bg-emerald-600 text-white shadow-md'
-                : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                : 'bg-zinc-100 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white border border-zinc-200 dark:border-zinc-800'
             }`}
           >
             <Rocket className="h-3.5 w-3.5" />
@@ -164,67 +164,67 @@ export function SupabaseGuideModal({ isOpen, onClose }: SupabaseGuideModalProps)
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs text-zinc-300">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-1 text-xs text-zinc-700 dark:text-zinc-300">
           {activeTab === 'supabase' ? (
             <div className="space-y-4">
               {/* Step 1 */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-                <h3 className="font-semibold text-white text-sm flex items-center gap-2 mb-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 transition-colors">
+                <h3 className="font-semibold text-zinc-900 dark:text-white text-sm flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                     1
                   </span>
                   Create a Free Supabase Project
                 </h3>
-                <p className="text-zinc-400 mb-2">
-                  Visit <a href="https://supabase.com" target="_blank" rel="noreferrer" className="text-emerald-400 underline inline-flex items-center gap-1">supabase.com <ExternalLink className="h-3 w-3" /></a> and create a new project. Choose region (e.g. Mumbai, India <code>ap-south-1</code> for lowest latency).
+                <p className="text-zinc-600 dark:text-zinc-400 mb-2">
+                  Visit <a href="https://supabase.com" target="_blank" rel="noreferrer" className="text-emerald-600 dark:text-emerald-400 underline inline-flex items-center gap-1 font-semibold">supabase.com <ExternalLink className="h-3 w-3" /></a> and create a new project. Choose region (e.g. Mumbai, India <code>ap-south-1</code> for lowest latency).
                 </p>
               </div>
 
               {/* Step 2 */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 transition-colors">
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold text-white text-sm flex items-center gap-2">
-                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+                  <h3 className="font-semibold text-zinc-900 dark:text-white text-sm flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                       2
                     </span>
                     Run Database & Row Level Security (RLS) Schema
                   </h3>
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs font-medium text-emerald-400 hover:bg-zinc-700 transition-colors"
+                    className="flex items-center gap-1 rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-2.5 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:bg-zinc-100 dark:hover:bg-zinc-700 transition-colors shadow-sm"
                   >
                     {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                     <span>{copied ? 'Copied SQL' : 'Copy SQL Script'}</span>
                   </button>
                 </div>
-                <p className="text-zinc-400 mb-3">
+                <p className="text-zinc-600 dark:text-zinc-400 mb-3">
                   In your Supabase dashboard, click <strong>SQL Editor</strong> &gt; <strong>New Query</strong>, paste the schema below, and click <strong>Run</strong>.
                 </p>
 
-                <pre className="rounded-xl bg-zinc-950 p-3 font-mono text-[11px] text-zinc-300 overflow-x-auto max-h-52 border border-zinc-800">
+                <pre className="rounded-xl bg-zinc-100 dark:bg-zinc-950 p-3 font-mono text-[11px] text-zinc-800 dark:text-zinc-300 overflow-x-auto max-h-52 border border-zinc-200 dark:border-zinc-800">
                   {SQL_SCHEMA}
                 </pre>
               </div>
 
               {/* Step 3 */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-                <h3 className="font-semibold text-white text-sm flex items-center gap-2 mb-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 transition-colors">
+                <h3 className="font-semibold text-zinc-900 dark:text-white text-sm flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                     3
                   </span>
                   Copy API Credentials
                 </h3>
-                <p className="text-zinc-400 mb-2">
+                <p className="text-zinc-600 dark:text-zinc-400 mb-2">
                   In Supabase, go to <strong>Project Settings</strong> &gt; <strong>API</strong> and copy:
                 </p>
-                <ul className="list-disc list-inside space-y-1 text-zinc-300 font-mono text-[11px]">
+                <ul className="list-disc list-inside space-y-1 text-zinc-700 dark:text-zinc-300 font-mono text-[11px]">
                   <li><strong>Project URL</strong> (e.g. <code>https://xyzcompany.supabase.co</code>)</li>
                   <li><strong>Project API Keys: anon public</strong></li>
                 </ul>
-                <p className="text-zinc-400 mt-2">
+                <p className="text-zinc-600 dark:text-zinc-400 mt-2">
                   You can enter them directly in the <strong>Config</strong> tab in SD-Ledger&apos;s Sign In modal or put them in <code>.env.local</code>:
                 </p>
-                <div className="mt-2 rounded-lg bg-zinc-950 p-2.5 font-mono text-[11px] text-emerald-400 border border-zinc-800">
+                <div className="mt-2 rounded-lg bg-zinc-100 dark:bg-zinc-950 p-2.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-400 border border-zinc-200 dark:border-zinc-800">
                   NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co<br />
                   NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-public-key
                 </div>
@@ -233,17 +233,17 @@ export function SupabaseGuideModal({ isOpen, onClose }: SupabaseGuideModalProps)
           ) : (
             <div className="space-y-4">
               {/* Vercel Step 1 */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-                <h3 className="font-semibold text-white text-sm flex items-center gap-2 mb-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 transition-colors">
+                <h3 className="font-semibold text-zinc-900 dark:text-white text-sm flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                     1
                   </span>
                   Push Code to GitHub
                 </h3>
-                <p className="text-zinc-400 mb-2">
+                <p className="text-zinc-600 dark:text-zinc-400 mb-2">
                   Initialize git and push your repository to your GitHub account:
                 </p>
-                <div className="rounded-lg bg-zinc-950 p-2.5 font-mono text-[11px] text-zinc-300 border border-zinc-800 space-y-1">
+                <div className="rounded-lg bg-zinc-100 dark:bg-zinc-950 p-2.5 font-mono text-[11px] text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 space-y-1">
                   <div>git add .</div>
                   <div>git commit -m &quot;feat: complete SD-Ledger implementation&quot;</div>
                   <div>git branch -M main</div>
@@ -253,34 +253,34 @@ export function SupabaseGuideModal({ isOpen, onClose }: SupabaseGuideModalProps)
               </div>
 
               {/* Vercel Step 2 */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-                <h3 className="font-semibold text-white text-sm flex items-center gap-2 mb-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 transition-colors">
+                <h3 className="font-semibold text-zinc-900 dark:text-white text-sm flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                     2
                   </span>
                   Import Project into Vercel
                 </h3>
-                <p className="text-zinc-400">
-                  Visit <a href="https://vercel.com/new" target="_blank" rel="noreferrer" className="text-emerald-400 underline inline-flex items-center gap-1">vercel.com/new <ExternalLink className="h-3 w-3" /></a>, select your GitHub repository <strong>sd-ledger</strong>, and select Next.js framework preset.
+                <p className="text-zinc-600 dark:text-zinc-400">
+                  Visit <a href="https://vercel.com/new" target="_blank" rel="noreferrer" className="text-emerald-600 dark:text-emerald-400 underline inline-flex items-center gap-1 font-semibold">vercel.com/new <ExternalLink className="h-3 w-3" /></a>, select your GitHub repository <strong>sd-ledger</strong>, and select Next.js framework preset.
                 </p>
               </div>
 
               {/* Vercel Step 3 */}
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4">
-                <h3 className="font-semibold text-white text-sm flex items-center gap-2 mb-1.5">
-                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400 text-xs">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 transition-colors">
+                <h3 className="font-semibold text-zinc-900 dark:text-white text-sm flex items-center gap-2 mb-1.5">
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
                     3
                   </span>
                   Set Environment Variables on Vercel
                 </h3>
-                <p className="text-zinc-400 mb-2">
+                <p className="text-zinc-600 dark:text-zinc-400 mb-2">
                   Under <strong>Environment Variables</strong> in Vercel project setup, add:
                 </p>
-                <div className="rounded-lg bg-zinc-950 p-2.5 font-mono text-[11px] text-zinc-300 border border-zinc-800 space-y-1">
-                  <div><strong className="text-emerald-400">NEXT_PUBLIC_SUPABASE_URL</strong> = https://your-project.supabase.co</div>
-                  <div><strong className="text-emerald-400">NEXT_PUBLIC_SUPABASE_ANON_KEY</strong> = your-anon-key</div>
+                <div className="rounded-lg bg-zinc-100 dark:bg-zinc-950 p-2.5 font-mono text-[11px] text-zinc-800 dark:text-zinc-300 border border-zinc-200 dark:border-zinc-800 space-y-1">
+                  <div><strong className="text-emerald-600 dark:text-emerald-400">NEXT_PUBLIC_SUPABASE_URL</strong> = https://your-project.supabase.co</div>
+                  <div><strong className="text-emerald-600 dark:text-emerald-400">NEXT_PUBLIC_SUPABASE_ANON_KEY</strong> = your-anon-key</div>
                 </div>
-                <p className="text-zinc-400 mt-2">
+                <p className="text-zinc-600 dark:text-zinc-400 mt-2">
                   Click <strong>Deploy</strong>! Vercel will build and deploy SD-Ledger with full HTTPS and worldwide edge performance.
                 </p>
               </div>

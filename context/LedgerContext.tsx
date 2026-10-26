@@ -15,6 +15,8 @@ import {
   idbGetAccounts,
   idbSaveAccount,
   idbSaveAccounts,
+  idbDeleteAccount,
+  idbClearUserData,
   idbGetTransactions,
   idbSaveTransaction,
   idbSaveTransactions,
@@ -28,9 +30,13 @@ import {
   idbGetMeta,
   idbExportDatabase,
   idbRestoreDatabase,
+  idbUpdateTransactionAccountIds,
+  idbUpdateReconciliationAccountIds,
+  idbRemapQueueAccountId,
 } from '../lib/db/indexedDB';
-import { processSync } from '../lib/db/syncEngine';
+import { processSync, SyncResult } from '../lib/db/syncEngine';
 import { computeLedgerSummary } from '../lib/ledger/balanceEngine';
+import { getSupabase } from '../lib/supabase/client';
 import {
   generateUUID,
   getTodayKolkata,
@@ -54,6 +60,12 @@ interface LedgerContextType {
   syncMessage: string | null;
   clearSyncMessage: () => void;
 
+  linkedCloudAccount: string | null;
+  linkedCloudUserId: string | null;
+  setLinkedCloudAccount: (email: string, uid: string) => void;
+  clearLinkedCloudAccount: () => void;
+  uploadOfflineToCloud: () => Promise<SyncResult>;
+
   // Actions
   setupTwoAccounts: (
     acc1: { name: string; balance: number; color?: string },
@@ -68,8 +80,18 @@ interface LedgerContextType {
     startDate?: string;
   }) => Promise<{ success: boolean; error?: string }>;
 
+  deleteAccount: (
+    accountId: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  clearLocalData: (targetUserId?: string) => Promise<void>;
+
   migrateDemoDataToCloud: (
     targetUserId: string
+  ) => Promise<{ success: boolean; count: number; error?: string }>;
+
+  importAccountsFromCloud: (
+    cloudUserId?: string
   ) => Promise<{ success: boolean; count: number; error?: string }>;
 
   addExpense: (data: {
@@ -111,7 +133,7 @@ interface LedgerContextType {
     notes?: string
   ) => Promise<{ success: boolean; error?: string }>;
 
-  triggerSync: () => Promise<void>;
+  triggerSync: () => Promise<SyncResult>;
   exportCSV: () => void;
   exportJSON: () => Promise<void>;
   restoreJSON: (jsonStr: string) => Promise<{ success: boolean; error?: string }>;
@@ -129,6 +151,9 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
+  const [linkedCloudAccount, setLinkedCloudAccountState] = useState<string | null>(null);
+  const [linkedCloudUserId, setLinkedCloudUserIdState] = useState<string | null>(null);
+
   const [hasOfflineDataToMigrate, setHasOfflineDataToMigrate] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
@@ -144,10 +169,66 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     errorMessage: null,
   });
 
-  // Load all user data from local IndexedDB
+  // Load linked cloud account info on client mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const email = localStorage.getItem('sd_ledger_linked_cloud_email');
+      const uid = localStorage.getItem('sd_ledger_linked_cloud_uid');
+      if (email) setLinkedCloudAccountState(email);
+      if (uid) setLinkedCloudUserIdState(uid);
+    }
+  }, []);
+
+  const setLinkedCloudAccount = useCallback((email: string, uid: string) => {
+    setLinkedCloudAccountState(email);
+    setLinkedCloudUserIdState(uid);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sd_ledger_linked_cloud_email', email);
+      localStorage.setItem('sd_ledger_linked_cloud_uid', uid);
+    }
+  }, []);
+
+  const clearLinkedCloudAccount = useCallback(() => {
+    setLinkedCloudAccountState(null);
+    setLinkedCloudUserIdState(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('sd_ledger_linked_cloud_email');
+      localStorage.removeItem('sd_ledger_linked_cloud_uid');
+    }
+  }, []);
+
+  // Load user data: In online mode fetches from Supabase if online; in offline mode uses IndexedDB
   const refreshData = useCallback(async (uid: string) => {
     if (!uid) return;
     try {
+      const supabase = getSupabase();
+      // If pure online mode (authenticated Supabase user) and device is online:
+      if (uid !== DEMO_USER_ID && supabase && navigator.onLine) {
+        try {
+          const [accRes, txRes, recRes, logRes] = await Promise.all([
+            supabase.from('accounts').select('*').eq('user_id', uid).order('account_index', { ascending: true }),
+            supabase.from('transactions').select('*').eq('user_id', uid).order('transaction_date', { ascending: false }),
+            supabase.from('reconciliations').select('*').eq('user_id', uid).order('reconciled_date', { ascending: false }),
+            supabase.from('audit_logs').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+          ]);
+
+          if (accRes.data) {
+            await idbSaveAccounts(accRes.data as Account[]);
+          }
+          if (txRes.data) {
+            await idbSaveTransactions(txRes.data as Transaction[]);
+          }
+          if (recRes.data) {
+            for (const r of recRes.data) await idbSaveReconciliation(r as Reconciliation);
+          }
+          if (logRes.data) {
+            for (const l of logRes.data) await idbSaveAuditLog(l as AuditLog);
+          }
+        } catch (fetchErr) {
+          console.warn('Could not fetch cloud data, falling back to local cache:', fetchErr);
+        }
+      }
+
       const [accs, txs, recs, logs, lastSync, queue] = await Promise.all([
         idbGetAccounts(uid),
         idbGetTransactions(uid),
@@ -164,7 +245,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus((prev) => ({
         ...prev,
         lastSyncedAt: lastSync || null,
-        pendingCount: queue.length,
+        pendingCount: uid === DEMO_USER_ID ? queue.length : 0,
       }));
       setIsInitialized(true);
     } catch (err) {
@@ -173,82 +254,117 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Sync with Supabase (Flushes local queue to cloud and pulls latest remote data)
-  const triggerSync = useCallback(async () => {
-    if (!userId) return;
-    const ok = await processSync(userId, (newStatus) => {
+  // Upload offline changes to linked cloud account (MANUAL ACTION ONLY - never runs automatically)
+  const uploadOfflineToCloud = useCallback(async (): Promise<SyncResult> => {
+    if (!navigator.onLine) {
+      const offlineMsg = 'Device is offline. Connect to the internet to upload to cloud.';
+      setSyncMessage(offlineMsg);
+      return { success: false, isOffline: true, message: offlineMsg };
+    }
+
+    const targetUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') : null);
+    if (!targetUid) {
+      const noLinkedMsg = 'No cloud account linked yet. Please import from your online account first.';
+      setSyncMessage(noLinkedMsg);
+      return { success: false, requiresAuth: true, message: noLinkedMsg };
+    }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { success: false, message: 'Supabase client not initialized.' };
+    }
+
+    // Verify session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || session.user.id !== targetUid) {
+      const authMsg = `Please sign in with your linked cloud account (${linkedCloudAccount || 'cloud account'}) to upload changes.`;
+      setSyncMessage(authMsg);
+      return { success: false, requiresAuth: true, message: authMsg };
+    }
+
+    setSyncStatus((prev) => ({ ...prev, isSyncing: true }));
+    const res = await processSync(targetUid, (newStatus) => {
       setSyncStatus(newStatus);
     });
-    // Refresh local cache after sync merge
-    await refreshData(userId);
-    if (ok) {
-      setSyncMessage('Cloud Sync Complete: Local and cloud records are fully up to date.');
-      setTimeout(() => setSyncMessage(null), 4000);
-    }
-  }, [userId, refreshData]);
 
-  // Initial load when user changes
+    if (res.success) {
+      // Mirror authoritative cloud accounts into DEMO_USER_ID
+      const cloudAccounts = await idbGetAccounts(targetUid);
+      for (const a of cloudAccounts) {
+        await idbSaveAccount({ ...a, user_id: DEMO_USER_ID });
+      }
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sd_ledger_offline_changes_made', 'false');
+      }
+      await refreshData(DEMO_USER_ID);
+      const successMsg = `Successfully uploaded offline changes to ${linkedCloudAccount || 'cloud'}!`;
+      setSyncMessage(successMsg);
+      setTimeout(() => setSyncMessage(null), 5000);
+      return { ...res, message: successMsg };
+    } else {
+      setSyncMessage(res.message);
+      return res;
+    }
+  }, [linkedCloudUserId, linkedCloudAccount, refreshData]);
+
+  // triggerSync alias for backward compatibility
+  const triggerSync = uploadOfflineToCloud;
+
+  // Initial load when user changes - NEVER AUTO-SYNC!
   useEffect(() => {
     if (!userId) {
       setAccounts([]);
       setTransactions([]);
       setReconciliations([]);
       setAuditLogs([]);
-      setIsInitialized(false);
+      setIsInitialized(true);
       setHasOfflineDataToMigrate(false);
       return;
     }
 
-    refreshData(userId).then(() => {
-      // Auto-trigger sync once data is loaded
-      triggerSync();
+    refreshData(userId);
+  }, [userId, refreshData]);
 
-      // Check if user has offline demo data that can be migrated to this cloud account
-      if (userId !== DEMO_USER_ID) {
-        Promise.all([
-          idbGetAccounts(DEMO_USER_ID),
-          idbGetTransactions(DEMO_USER_ID),
-        ]).then(([dAccs, dTxs]) => {
-          if (dAccs.length > 0 || dTxs.length > 0) {
-            setHasOfflineDataToMigrate(true);
-          } else {
-            setHasOfflineDataToMigrate(false);
-          }
-        });
-      } else {
-        setHasOfflineDataToMigrate(false);
-      }
-    });
-  }, [userId, refreshData, triggerSync]);
-
-  // Listen to browser online/offline events
+  // Listen to browser online/offline events (Status indicator only - NEVER AUTO-SYNC!)
   useEffect(() => {
     const handleOnline = () => {
       setSyncStatus((prev) => ({ ...prev, isOnline: true }));
-      if (userId) {
-        triggerSync();
-      }
     };
 
     const handleOffline = () => {
       setSyncStatus((prev) => ({
         ...prev,
         isOnline: false,
-        errorMessage: 'Device is offline. Entries are securely cached in IndexedDB.',
       }));
     };
 
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
+    // Prompt user before closing if in offline mode with unsynced changes
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (userId === DEMO_USER_ID && syncStatus.pendingCount > 0) {
+        e.preventDefault();
+        e.returnValue = 'You have unsynced changes in offline mode. Be sure to upload to cloud before switching devices or clearing browser cache.';
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
-  }, [userId, triggerSync]);
+  }, [userId, syncStatus.pendingCount]);
 
-  // Needs Setup Wizard if fewer than 2 active accounts exist
-  const needsSetupWizard = isInitialized && accounts.length < 2;
+  // In Offline mode: setup wizard is needed if 0 accounts have been imported yet.
+  // In Online mode: setup wizard is needed if fewer than 2 accounts exist.
+  const needsSetupWizard = isInitialized && (
+    userId === DEMO_USER_ID
+      ? accounts.length === 0
+      : accounts.length < 2
+  );
 
   // Compute ledger summary
   const [currentMonth, setCurrentMonth] = useState('');
@@ -260,6 +376,12 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const summary = useMemo(() => {
     return computeLedgerSummary(accounts, transactions, reconciliations, currentMonth);
   }, [accounts, transactions, reconciliations, currentMonth]);
+
+  const markOfflineChange = useCallback(() => {
+    if (typeof window !== 'undefined' && (!userId || userId === DEMO_USER_ID)) {
+      localStorage.setItem('sd_ledger_offline_changes_made', 'true');
+    }
+  }, [userId]);
 
   // Setup Exactly Two Accounts
   const setupTwoAccounts = async (
@@ -298,25 +420,39 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveAccounts([account1, account2]);
 
-    // Queue for sync
-    const syncItem1: SyncQueueItem = {
-      id: generateUUID(),
-      table: 'accounts',
-      action: 'UPSERT',
-      payload: account1 as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    };
-    const syncItem2: SyncQueueItem = {
-      id: generateUUID(),
-      table: 'accounts',
-      action: 'UPSERT',
-      payload: account2 as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    };
-    await idbAddToSyncQueue(syncItem1);
-    await idbAddToSyncQueue(syncItem2);
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          const clean1 = { ...account1 };
+          const clean2 = { ...account2 };
+          await supabase.from('accounts').upsert([clean1, clean2]);
+        } catch (cloudErr) {
+          console.warn('Could not write accounts directly to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      // Offline mode: queue for later manual upload
+      const syncItem1: SyncQueueItem = {
+        id: generateUUID(),
+        table: 'accounts',
+        action: 'UPSERT',
+        payload: account1 as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      };
+      const syncItem2: SyncQueueItem = {
+        id: generateUUID(),
+        table: 'accounts',
+        action: 'UPSERT',
+        payload: account2 as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      };
+      await idbAddToSyncQueue(syncItem1);
+      await idbAddToSyncQueue(syncItem2);
+      markOfflineChange();
+    }
 
     // Audit Log
     const audit: AuditLog = {
@@ -332,7 +468,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     await idbSaveAuditLog(audit);
 
     await refreshData(userId);
-    triggerSync();
     return true;
   };
 
@@ -362,14 +497,26 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveAccount(newAccount);
 
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'accounts',
-      action: 'UPSERT',
-      payload: newAccount as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('accounts').insert(newAccount);
+        } catch (cloudErr) {
+          console.warn('Could not insert account directly to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'accounts',
+        action: 'UPSERT',
+        payload: newAccount as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     await idbSaveAuditLog({
       id: generateUUID(),
@@ -383,21 +530,78 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
-  // Migrate offline demo data to cloud account
+  // Delete Account
+  const deleteAccount = async (
+    accountId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!userId) return { success: false, error: 'User is not logged in.' };
+    const target = accounts.find((a) => a.id === accountId);
+    if (!target) return { success: false, error: 'Account not found.' };
+
+    const nowIso = new Date().toISOString();
+
+    await idbDeleteAccount(accountId, userId);
+
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('accounts').delete().eq('id', accountId);
+        } catch (cloudErr) {
+          console.warn('Could not delete account directly on Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'accounts',
+        action: 'DELETE',
+        payload: { id: accountId },
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
+
+    await idbSaveAuditLog({
+      id: generateUUID(),
+      user_id: userId,
+      action: 'DELETE',
+      entity_type: 'ACCOUNT',
+      entity_id: accountId,
+      summary: `Deleted personal account "${target.display_name}"`,
+      details: { deletedAccount: target },
+      created_at: nowIso,
+    });
+
+    await refreshData(userId);
+    return { success: true };
+  };
+
+  // Clear local data for active user or demo (used when switching accounts)
+  const clearLocalData = async (targetUserId?: string): Promise<void> => {
+    const uid = targetUserId || userId;
+    if (uid) {
+      await idbClearUserData(uid);
+      await refreshData(uid);
+    }
+  };
+
+  // Migrate offline demo data to cloud account (Smart Merge by name, no duplicates, preserve offline profile)
   const migrateDemoDataToCloud = async (
     targetUserId: string
   ): Promise<{ success: boolean; count: number; error?: string }> => {
     if (!targetUserId) return { success: false, count: 0, error: 'No target user ID' };
     const nowIso = new Date().toISOString();
 
-    const [demoAccs, demoTxs, demoRecs] = await Promise.all([
+    const [demoAccs, demoTxs, demoRecs, targetExistingAccs] = await Promise.all([
       idbGetAccounts(DEMO_USER_ID),
       idbGetTransactions(DEMO_USER_ID),
       idbGetReconciliations(DEMO_USER_ID),
+      idbGetAccounts(targetUserId),
     ]);
 
     if (demoAccs.length === 0 && demoTxs.length === 0) {
@@ -405,42 +609,74 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       return { success: true, count: 0 };
     }
 
-    const updatedAccs: Account[] = demoAccs.map((a, idx) => ({
-      ...a,
-      user_id: targetUserId,
-      account_index: accounts.length + idx + 1,
-      updated_at: nowIso,
-    }));
+    // Map existing target accounts by normalized display name and id
+    const targetByName = new Map<string, Account>();
+    targetExistingAccs.forEach((a) => {
+      targetByName.set(a.display_name.trim().toLowerCase(), a);
+      targetByName.set(a.id, a);
+    });
 
-    const updatedTxs: Transaction[] = demoTxs.map((t) => ({
-      ...t,
-      user_id: targetUserId,
-      updated_at: nowIso,
-    }));
+    // Remap demo accounts to matching cloud accounts or prepare new ones
+    const accountsToSave: Account[] = [];
+    const idRemap = new Map<string, string>(); // oldDemoId -> targetAccountId
+
+    for (const dAcc of demoAccs) {
+      const match = targetByName.get(dAcc.display_name.trim().toLowerCase()) || targetByName.get(dAcc.id);
+      if (match) {
+        // MATCH: Cloud account is authoritative. Remap demo transactions to this cloud account ID
+        idRemap.set(dAcc.id, match.id);
+        await idbUpdateTransactionAccountIds(dAcc.id, match.id, targetUserId);
+        await idbUpdateTransactionAccountIds(dAcc.id, match.id, DEMO_USER_ID);
+        await idbUpdateReconciliationAccountIds(dAcc.id, match.id, targetUserId);
+        await idbUpdateReconciliationAccountIds(dAcc.id, match.id, DEMO_USER_ID);
+        await idbRemapQueueAccountId(dAcc.id, match.id);
+        accountsToSave.push(match);
+      } else {
+        // Brand new account created offline: add to targetUserId
+        const newAcc: Account = {
+          ...dAcc,
+          user_id: targetUserId,
+          account_index: targetExistingAccs.length + accountsToSave.length + 1,
+          updated_at: nowIso,
+        };
+        accountsToSave.push(newAcc);
+        idRemap.set(dAcc.id, newAcc.id);
+        await idbAddToSyncQueue({
+          id: generateUUID(),
+          table: 'accounts',
+          action: 'UPSERT',
+          payload: newAcc as unknown as Record<string, unknown>,
+          created_at: nowIso,
+          retries: 0,
+        });
+      }
+    }
+
+    const updatedTxs: Transaction[] = demoTxs.map((t) => {
+      const remappedFrom = t.from_account_id ? idRemap.get(t.from_account_id) || t.from_account_id : null;
+      const remappedTo = t.to_account_id ? idRemap.get(t.to_account_id) || t.to_account_id : null;
+      return {
+        ...t,
+        user_id: targetUserId,
+        from_account_id: remappedFrom,
+        to_account_id: remappedTo,
+        updated_at: nowIso,
+      };
+    });
 
     const updatedRecs: Reconciliation[] = demoRecs.map((r) => ({
       ...r,
       user_id: targetUserId,
+      account_id: idRemap.get(r.account_id) || r.account_id,
     }));
 
-    await idbSaveAccounts(updatedAccs);
+    await idbSaveAccounts(accountsToSave);
     await idbSaveTransactions(updatedTxs);
     for (const r of updatedRecs) {
       await idbSaveReconciliation(r);
     }
 
-    // Queue for sync to Supabase cloud
-    for (const acc of updatedAccs) {
-      await idbAddToSyncQueue({
-        id: generateUUID(),
-        table: 'accounts',
-        action: 'UPSERT',
-        payload: acc as unknown as Record<string, unknown>,
-        created_at: nowIso,
-        retries: 0,
-      });
-    }
-
+    // Push transactions to sync queue
     for (const tx of updatedTxs) {
       await idbAddToSyncQueue({
         id: generateUUID(),
@@ -463,21 +699,107 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
-    await idbSaveAuditLog({
-      id: generateUUID(),
-      user_id: targetUserId,
-      action: 'SETUP',
-      entity_type: 'SYSTEM',
-      entity_id: targetUserId,
-      summary: `Synced ${updatedAccs.length} accounts and ${updatedTxs.length} transactions from offline demo to Cloud account`,
-      details: { accountCount: updatedAccs.length, txCount: updatedTxs.length },
-      created_at: nowIso,
-    });
+    // Keep persistent offline accounts in sync with authoritative cloud accounts (DO NOT wipe DEMO_USER_ID!)
+    for (const acc of accountsToSave) {
+      await idbSaveAccount({ ...acc, user_id: DEMO_USER_ID });
+    }
 
     setHasOfflineDataToMigrate(false);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('sd_ledger_offline_changes_made', 'false');
+      localStorage.removeItem('sd_ledger_offline_synced_cloud_account');
+    }
     await refreshData(targetUserId);
     await triggerSync();
-    return { success: true, count: updatedAccs.length + updatedTxs.length };
+    return { success: true, count: accountsToSave.length + updatedTxs.length };
+  };
+
+  // Import accounts directly from cloud into offline local storage
+  const importAccountsFromCloud = async (
+    cloudUserId?: string
+  ): Promise<{ success: boolean; count: number; error?: string }> => {
+    try {
+      const supabase = getSupabase();
+      if (!supabase) {
+        return { success: false, count: 0, error: 'Supabase is not configured yet.' };
+      }
+
+      let targetUid = cloudUserId;
+      let targetEmail = '';
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!targetUid) {
+        targetUid = session?.user?.id;
+      }
+      if (session?.user?.id === targetUid) {
+        targetEmail = session?.user?.email || '';
+      }
+
+      if (!targetUid) {
+        return { success: false, count: 0, error: 'Please sign in with your Supabase account to import cloud bank accounts.' };
+      }
+
+      const [accRes, txRes, recRes] = await Promise.all([
+        supabase.from('accounts').select('*').eq('user_id', targetUid).order('account_index', { ascending: true }),
+        supabase.from('transactions').select('*').eq('user_id', targetUid).order('transaction_date', { ascending: false }),
+        supabase.from('reconciliations').select('*').eq('user_id', targetUid).order('reconciled_date', { ascending: false }),
+      ]);
+
+      if (accRes.error) throw accRes.error;
+      const remoteAccs = accRes.data || [];
+      if (remoteAccs.length === 0) {
+        return {
+          success: false,
+          count: 0,
+          error: 'No bank accounts found in this cloud account. Please create accounts in online mode first.',
+        };
+      }
+
+      const nowIso = new Date().toISOString();
+      const offlineAccounts: Account[] = remoteAccs.map((a: Account) => ({
+        ...a,
+        user_id: DEMO_USER_ID,
+        updated_at: nowIso,
+      }));
+
+      const offlineTxs: Transaction[] = (txRes.data || []).map((t: Transaction) => ({
+        ...t,
+        user_id: DEMO_USER_ID,
+        sync_status: 'synced',
+        updated_at: t.updated_at || nowIso,
+      }));
+
+      const offlineRecs: Reconciliation[] = (recRes.data || []).map((r: Reconciliation) => ({
+        ...r,
+        user_id: DEMO_USER_ID,
+      }));
+
+      // Save into IndexedDB for offline demo
+      await idbSaveAccounts(offlineAccounts);
+      await idbSaveTransactions(offlineTxs);
+      for (const r of offlineRecs) {
+        await idbSaveReconciliation(r);
+      }
+
+      // Record linked cloud credentials
+      if (targetEmail) {
+        setLinkedCloudAccount(targetEmail, targetUid);
+      } else {
+        setLinkedCloudUserIdState(targetUid);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('sd_ledger_linked_cloud_uid', targetUid);
+        }
+      }
+
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('sd_ledger_offline_changes_made', 'false');
+      }
+
+      await refreshData(DEMO_USER_ID);
+      return { success: true, count: offlineAccounts.length };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to import accounts';
+      return { success: false, count: 0, error: msg };
+    }
   };
 
   // Add Expense
@@ -513,20 +835,31 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       description: data.description?.trim() || '',
       created_at: nowIso,
       updated_at: nowIso,
-      sync_status: 'pending',
+      sync_status: userId === DEMO_USER_ID ? 'pending' : 'synced',
     };
 
     await idbSaveTransaction(tx);
 
-    // Add to sync queue
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'transactions',
-      action: 'UPSERT',
-      payload: tx as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('transactions').insert(tx);
+        } catch (cloudErr) {
+          console.warn('Could not insert transaction to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'transactions',
+        action: 'UPSERT',
+        payload: tx as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     // Audit log
     const acc = accounts.find((a) => a.id === data.fromAccountId);
@@ -542,7 +875,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
@@ -579,19 +911,31 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       description: data.description?.trim() || '',
       created_at: nowIso,
       updated_at: nowIso,
-      sync_status: 'pending',
+      sync_status: userId === DEMO_USER_ID ? 'pending' : 'synced',
     };
 
     await idbSaveTransaction(tx);
 
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'transactions',
-      action: 'UPSERT',
-      payload: tx as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('transactions').insert(tx);
+        } catch (cloudErr) {
+          console.warn('Could not insert income to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'transactions',
+        action: 'UPSERT',
+        payload: tx as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     const acc = accounts.find((a) => a.id === data.toAccountId);
     await idbSaveAuditLog({
@@ -606,7 +950,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
@@ -646,20 +989,31 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       description: data.description?.trim() || '',
       created_at: nowIso,
       updated_at: nowIso,
-      sync_status: 'pending',
+      sync_status: userId === DEMO_USER_ID ? 'pending' : 'synced',
     };
 
-    // Single atomic record update updates both balances consistently!
     await idbSaveTransaction(tx);
 
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'transactions',
-      action: 'UPSERT',
-      payload: tx as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('transactions').insert(tx);
+        } catch (cloudErr) {
+          console.warn('Could not insert transfer to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'transactions',
+        action: 'UPSERT',
+        payload: tx as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     const fromAcc = accounts.find((a) => a.id === data.fromAccountId);
     const toAcc = accounts.find((a) => a.id === data.toAccountId);
@@ -676,7 +1030,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
@@ -697,19 +1050,31 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       user_id: userId,
       amount: Math.round(Number(updated.amount) * 100) / 100,
       updated_at: nowIso,
-      sync_status: 'pending',
+      sync_status: userId === DEMO_USER_ID ? 'pending' : 'synced',
     };
 
     await idbSaveTransaction(cleanUpdated);
 
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'transactions',
-      action: 'UPSERT',
-      payload: cleanUpdated as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('transactions').upsert(cleanUpdated);
+        } catch (cloudErr) {
+          console.warn('Could not update transaction in Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'transactions',
+        action: 'UPSERT',
+        payload: cleanUpdated as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     await idbSaveAuditLog({
       id: generateUUID(),
@@ -723,7 +1088,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
@@ -737,14 +1101,26 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbDeleteTransaction(id, userId);
 
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'transactions',
-      action: 'DELETE',
-      payload: { id },
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('transactions').delete().eq('id', id);
+        } catch (cloudErr) {
+          console.warn('Could not delete transaction from Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'transactions',
+        action: 'DELETE',
+        payload: { id },
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     await idbSaveAuditLog({
       id: generateUUID(),
@@ -758,7 +1134,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
@@ -791,14 +1166,26 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveReconciliation(rec);
 
-    await idbAddToSyncQueue({
-      id: generateUUID(),
-      table: 'reconciliations',
-      action: 'UPSERT',
-      payload: rec as unknown as Record<string, unknown>,
-      created_at: nowIso,
-      retries: 0,
-    });
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('reconciliations').insert(rec);
+        } catch (cloudErr) {
+          console.warn('Could not insert reconciliation to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'reconciliations',
+        action: 'UPSERT',
+        payload: rec as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
 
     await idbSaveAuditLog({
       id: generateUUID(),
@@ -812,7 +1199,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     await refreshData(userId);
-    triggerSync();
     return { success: true };
   };
 
@@ -851,7 +1237,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       });
 
       await refreshData(userId);
-      triggerSync();
       return { success: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid JSON file format';
@@ -873,9 +1258,17 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         hasOfflineDataToMigrate,
         syncMessage,
         clearSyncMessage,
+        linkedCloudAccount,
+        linkedCloudUserId,
+        setLinkedCloudAccount,
+        clearLinkedCloudAccount,
+        uploadOfflineToCloud,
         setupTwoAccounts,
         addAccount,
+        deleteAccount,
+        clearLocalData,
         migrateDemoDataToCloud,
+        importAccountsFromCloud,
         addExpense,
         addIncome,
         addTransfer,

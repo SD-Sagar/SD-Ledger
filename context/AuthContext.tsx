@@ -105,6 +105,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (_event, newSession) => {
             if (!mounted) return;
+            const isDemoActive = typeof window !== 'undefined' && localStorage.getItem('sd_ledger_is_demo') === 'true';
+            if (isDemoActive) {
+              // User is explicitly in Offline Mode. Store session for background cloud upload/import, but keep demo profile active!
+              if (newSession?.user) {
+                setSession(newSession);
+                setRawUser(newSession.user);
+              } else {
+                setSession(null);
+                setRawUser(null);
+              }
+              continueAsDemo();
+              return;
+            }
+
             if (newSession?.user) {
               setSession(newSession);
               setRawUser(newSession.user);
@@ -115,13 +129,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 isEmailVerified: Boolean(newSession.user.email_confirmed_at),
               });
               setIsDemoUser(false);
-              if (typeof window !== 'undefined') {
-                localStorage.removeItem('sd_ledger_is_demo');
-              }
             } else {
               setSession(null);
               setRawUser(null);
-              // don't clear demo user if explicitly running demo
+              setUser(null);
             }
           }
         );
@@ -242,6 +253,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (typeof window !== 'undefined') {
       localStorage.removeItem('sd_ledger_is_demo');
+      if (user && user.id !== DEMO_USER_ID) {
+        localStorage.setItem('sd_ledger_offline_synced_cloud_account', user.email || user.id);
+        localStorage.setItem('sd_ledger_offline_changes_made', 'false');
+      }
     }
 
     setUser(null);

@@ -110,6 +110,169 @@ export async function idbSaveAccounts(accounts: Account[]): Promise<void> {
   });
 }
 
+export async function idbMarkAccountDeleted(accountId: string, userId: string): Promise<void> {
+  const key = `deleted_accounts_${userId}`;
+  const existing = (await idbGetMeta<string[]>(key)) || [];
+  if (!existing.includes(accountId)) {
+    existing.push(accountId);
+    await idbSetMeta(key, existing);
+  }
+}
+
+export async function idbGetDeletedAccountIds(userId: string): Promise<string[]> {
+  const key = `deleted_accounts_${userId}`;
+  return (await idbGetMeta<string[]>(key)) || [];
+}
+
+export async function idbUnmarkAccountDeleted(accountId: string, userId: string): Promise<void> {
+  const key = `deleted_accounts_${userId}`;
+  const existing = (await idbGetMeta<string[]>(key)) || [];
+  const filtered = existing.filter((id) => id !== accountId);
+  await idbSetMeta(key, filtered);
+}
+
+export async function idbDeleteAccount(id: string, userId: string): Promise<void> {
+  await idbMarkAccountDeleted(id, userId);
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('accounts', 'readwrite');
+    const store = tx.objectStore('accounts');
+    const getReq = store.get(id);
+
+    getReq.onsuccess = () => {
+      const item = getReq.result as Account | undefined;
+      if (item && item.user_id === userId) {
+        store.delete(id);
+      }
+      resolve();
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+export async function idbUpdateTransactionAccountIds(
+  oldAccountId: string,
+  newAccountId: string,
+  userId: string
+): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('transactions', 'readwrite');
+    const store = tx.objectStore('transactions');
+    const index = store.index('user_id');
+    const request = index.getAll(userId);
+
+    request.onsuccess = () => {
+      const list = (request.result as Transaction[]) || [];
+      for (const t of list) {
+        let changed = false;
+        if (t.from_account_id === oldAccountId) {
+          t.from_account_id = newAccountId;
+          changed = true;
+        }
+        if (t.to_account_id === oldAccountId) {
+          t.to_account_id = newAccountId;
+          changed = true;
+        }
+        if (changed) {
+          store.put(t);
+        }
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function idbUpdateReconciliationAccountIds(
+  oldAccountId: string,
+  newAccountId: string,
+  userId: string
+): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('reconciliations', 'readwrite');
+    const store = tx.objectStore('reconciliations');
+    const index = store.index('user_id');
+    const request = index.getAll(userId);
+
+    request.onsuccess = () => {
+      const list = (request.result as Reconciliation[]) || [];
+      for (const r of list) {
+        if (r.account_id === oldAccountId) {
+          r.account_id = newAccountId;
+          store.put(r);
+        }
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function idbRemapQueueAccountId(
+  oldAccountId: string,
+  newAccountId: string
+): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('sync_queue', 'readwrite');
+    const store = tx.objectStore('sync_queue');
+    const request = store.getAll();
+
+    request.onsuccess = () => {
+      const list = (request.result as SyncQueueItem[]) || [];
+      for (const item of list) {
+        let modified = false;
+        const payload = item.payload as Record<string, unknown> | undefined;
+        if (payload) {
+          if (item.table === 'accounts' && payload.id === oldAccountId) {
+            payload.id = newAccountId;
+            modified = true;
+          } else if (item.table === 'transactions') {
+            if (payload.from_account_id === oldAccountId) {
+              payload.from_account_id = newAccountId;
+              modified = true;
+            }
+            if (payload.to_account_id === oldAccountId) {
+              payload.to_account_id = newAccountId;
+              modified = true;
+            }
+          } else if (item.table === 'reconciliations' && payload.account_id === oldAccountId) {
+            payload.account_id = newAccountId;
+            modified = true;
+          }
+        }
+        if (modified) {
+          store.put(item);
+        }
+      }
+      resolve();
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function idbClearUserData(userId: string): Promise<void> {
+  if (!userId) return;
+  const db = await getDB();
+  const stores = ['accounts', 'transactions', 'reconciliations', 'audit_logs'] as const;
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(stores, 'readwrite');
+    stores.forEach((storeName) => {
+      const store = tx.objectStore(storeName);
+      const index = store.index('user_id');
+      const req = index.getAllKeys(userId);
+      req.onsuccess = () => {
+        const keys = req.result;
+        keys.forEach((k) => store.delete(k));
+      };
+    });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 // ---------------------- TRANSACTIONS ----------------------
 export async function idbGetTransactions(userId: string): Promise<Transaction[]> {
   const db = await getDB();

@@ -26,11 +26,13 @@ import {
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
+  promptMessage?: string | null;
+  initialTab?: TabType;
 }
 
 type TabType = 'signin' | 'signup' | 'forgot' | 'settings';
 
-export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthModalProps) {
   const {
     user,
     isDemoUser,
@@ -46,7 +48,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     signOut,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<TabType>('signin');
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -54,6 +56,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  // Synchronize initialTab if changed
+  React.useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Supabase Custom Config state
   const config = getSupabaseConfig();
@@ -168,6 +177,14 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             <X className="h-5 w-5" />
           </button>
         </div>
+
+        {/* Prompt banner for Offline Sync credential request */}
+        {promptMessage && (
+          <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-900/60 bg-emerald-950/40 p-3 text-xs text-emerald-300">
+            <Sparkles className="h-4 w-4 shrink-0 text-emerald-400" />
+            <span className="leading-relaxed">{promptMessage}</span>
+          </div>
+        )}
 
         {/* Tab Switcher */}
         <div className="grid grid-cols-4 gap-1 p-1 mt-4 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-medium">

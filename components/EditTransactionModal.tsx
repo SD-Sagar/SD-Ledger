@@ -119,33 +119,33 @@ export function EditTransactionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">
               <Edit3 className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
                 Edit {transaction.type.toLowerCase()} Entry
               </h2>
-              <p className="text-[11px] text-zinc-400">
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 Updating updates all calculated balances atomically
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-300">
-            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-800 dark:text-rose-300">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
           </div>
         )}
@@ -153,11 +153,11 @@ export function EditTransactionModal({
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Amount */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
               Amount (₹)
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-2.5 text-base font-semibold text-zinc-400">
+              <span className="absolute left-3.5 top-2.5 text-base font-semibold text-zinc-400 dark:text-zinc-500">
                 ₹
               </span>
               <input
@@ -166,11 +166,11 @@ export function EditTransactionModal({
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900/90 py-2.5 pl-8 pr-4 text-lg font-mono font-bold text-white placeholder-zinc-600 focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/90 py-2.5 pl-8 pr-4 text-lg font-mono font-bold text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-600 focus:border-indigo-500 focus:outline-none transition-colors"
               />
             </div>
             {amount && parseFloat(amount) > 0 && (
-              <p className="mt-1 text-xs text-indigo-400 font-mono">
+              <p className="mt-1 text-xs text-indigo-600 dark:text-indigo-400 font-mono font-semibold">
                 {formatINR(parseFloat(amount))}
               </p>
             )}
@@ -179,13 +179,13 @@ export function EditTransactionModal({
           {/* Account selector(s) */}
           {transaction.type === 'EXPENSE' && (
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                 Deduct From Account
               </label>
               <select
                 value={fromAccountId}
                 onChange={(e) => setFromAccountId(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2.5 px-3 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2.5 px-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
               >
                 {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
@@ -198,13 +198,13 @@ export function EditTransactionModal({
 
           {transaction.type === 'INCOME' && (
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                 Deposit Into Account
               </label>
               <select
                 value={toAccountId}
                 onChange={(e) => setToAccountId(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2.5 px-3 text-sm text-white focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2.5 px-3 text-sm text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
               >
                 {accounts.map((acc) => (
                   <option key={acc.id} value={acc.id}>
@@ -218,13 +218,13 @@ export function EditTransactionModal({
           {transaction.type === 'TRANSFER' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-rose-400 mb-1">
+                <label className="block text-xs font-medium text-rose-600 dark:text-rose-400 mb-1">
                   Source Account
                 </label>
                 <select
                   value={fromAccountId}
                   onChange={(e) => setFromAccountId(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2.5 px-3 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2.5 px-3 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
                 >
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
@@ -235,13 +235,13 @@ export function EditTransactionModal({
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-emerald-400 mb-1">
+                <label className="block text-xs font-medium text-emerald-600 dark:text-emerald-400 mb-1">
                   Destination Account
                 </label>
                 <select
                   value={toAccountId}
                   onChange={(e) => setToAccountId(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2.5 px-3 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2.5 px-3 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
                 >
                   {accounts.map((acc) => (
                     <option key={acc.id} value={acc.id}>
@@ -256,7 +256,7 @@ export function EditTransactionModal({
           {/* Category */}
           {transaction.type !== 'TRANSFER' && (
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                 Category / Source
               </label>
               <input
@@ -264,7 +264,7 @@ export function EditTransactionModal({
                 required
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 px-3 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 px-3 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
               />
             </div>
           )}
@@ -272,7 +272,7 @@ export function EditTransactionModal({
           {/* Date and Time */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                 Date (Asia/Kolkata)
               </label>
               <input
@@ -280,11 +280,11 @@ export function EditTransactionModal({
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 px-3 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 px-3 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-zinc-300 mb-1">
+              <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
                 Time (IST)
               </label>
               <input
@@ -292,14 +292,14 @@ export function EditTransactionModal({
                 required
                 value={time}
                 onChange={(e) => setTime(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 px-3 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 px-3 text-xs text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none transition-colors"
               />
             </div>
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
               Description / Notes (Optional)
             </label>
             <input
@@ -307,7 +307,7 @@ export function EditTransactionModal({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="e.g. Note about transaction"
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 px-3 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 px-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-indigo-500 focus:outline-none transition-colors"
             />
           </div>
 
@@ -315,7 +315,7 @@ export function EditTransactionModal({
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-xl shadow-indigo-950 transition-all hover:bg-indigo-500 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white shadow-xl shadow-indigo-950/20 transition-all hover:bg-indigo-500 disabled:opacity-50"
           >
             {isSubmitting ? 'Saving Changes...' : 'Update & Recalculate Balances'}
           </button>

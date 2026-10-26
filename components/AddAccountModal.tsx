@@ -88,43 +88,43 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-400">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400">
               <PlusCircle className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Add New Account</h2>
-              <p className="text-[11px] text-zinc-400">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Add New Account</h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 Track additional bank, wallet, or cash accounts
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Reassurance */}
-        <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-900/60 bg-emerald-950/20 px-3 py-1.5 text-xs text-emerald-300">
-          <Lock className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
+        <div className="mt-3 inline-flex items-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-emerald-800 dark:text-emerald-300">
+          <Lock className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
           <span>No bank account numbers or credentials are ever stored.</span>
         </div>
 
         {error && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-300">
-            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-800 dark:text-rose-300">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
           </div>
         )}
         {success && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-900/60 bg-emerald-950/40 p-3 text-xs text-emerald-300">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+          <div className="mt-3 flex items-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span>{success}</span>
           </div>
         )}
@@ -132,11 +132,11 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {/* Display Name */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
               Account Display Name
             </label>
             <div className="relative">
-              <Building2 className="absolute left-3.5 top-2.5 h-4 w-4 text-zinc-500" />
+              <Building2 className="absolute left-3.5 top-2.5 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
               <input
                 type="text"
                 required
@@ -144,18 +144,18 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
                 value={accountName}
                 onChange={(e) => setAccountName(e.target.value)}
                 placeholder="e.g. ICICI Bank, Cash Wallet, Kotak 811"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-10 pr-4 text-sm text-white placeholder-zinc-500 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 pl-10 pr-4 text-sm text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-emerald-500 focus:outline-none transition-colors"
               />
             </div>
           </div>
 
           {/* Opening Balance */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
               Opening Balance (₹)
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-2 text-base font-semibold text-zinc-400">
+              <span className="absolute left-3.5 top-2 text-base font-semibold text-zinc-400 dark:text-zinc-500">
                 ₹
               </span>
               <input
@@ -165,11 +165,11 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
                 value={openingBalance}
                 onChange={(e) => setOpeningBalance(e.target.value)}
                 placeholder="0.00"
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-8 pr-4 text-base font-mono font-bold text-white placeholder-zinc-600 focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-2 pl-8 pr-4 text-base font-mono font-bold text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-600 focus:border-emerald-500 focus:outline-none transition-colors"
               />
             </div>
             {openingBalance && !isNaN(parseFloat(openingBalance)) && (
-              <p className="mt-1 text-xs text-emerald-400 font-mono">
+              <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400 font-mono font-semibold">
                 {formatINR(parseFloat(openingBalance))}
               </p>
             )}
@@ -177,24 +177,24 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
 
           {/* Starting Date */}
           <div>
-            <label className="block text-xs font-medium text-zinc-300 mb-1">
+            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
               Opening Tracking Date (Asia/Kolkata)
             </label>
             <div className="relative">
-              <Calendar className="absolute left-3.5 top-2.5 h-4 w-4 text-zinc-500" />
+              <Calendar className="absolute left-3.5 top-2.5 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
               <input
                 type="date"
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-10 pr-3 text-xs text-white focus:border-emerald-500 focus:outline-none"
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2 pl-10 pr-3 text-xs text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none transition-colors"
               />
             </div>
           </div>
 
           {/* Color Tag Picker */}
           <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-2">
+            <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-2">
               Color Tag
             </label>
             <div className="flex items-center gap-3">
@@ -204,7 +204,7 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
                   type="button"
                   onClick={() => setBankColor(c.from)}
                   className={`h-7 w-7 rounded-full transition-transform ${
-                    bankColor === c.from ? 'scale-125 ring-2 ring-white' : 'opacity-70 hover:opacity-100'
+                    bankColor === c.from ? 'scale-125 ring-2 ring-emerald-500 dark:ring-white' : 'opacity-70 hover:opacity-100'
                   }`}
                   style={{ backgroundColor: c.from }}
                   title={c.name}
@@ -217,7 +217,7 @@ export function AddAccountModal({ isOpen, onClose }: AddAccountModalProps) {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-950 transition-all hover:brightness-110 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 py-3 text-sm font-semibold text-white shadow-xl shadow-emerald-950/20 transition-all hover:brightness-110 disabled:opacity-50"
           >
             {isSubmitting ? 'Creating Account...' : 'Create Account'}
             <ArrowRight className="h-4 w-4" />

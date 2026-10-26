@@ -221,7 +221,7 @@ The CSV file includes 10 standardized columns:
 
 ## Deploying to Vercel
 
-Vercel is the recommended hosting platform for Next.js apps.
+Vercel is the premier hosting platform for Next.js applications with native edge rendering and zero-configuration builds.
 
 ### Step 1: Push Code to GitHub
 ```bash
@@ -234,15 +234,41 @@ git push -u origin main
 
 ### Step 2: Import into Vercel
 1. Visit [vercel.com/new](https://vercel.com/new).
-2. Click **Import** next to your `sd-ledger` GitHub repository.
-3. Framework Preset: **Next.js** (detected automatically).
+2. Connect your GitHub account and click **Import** next to your `sd-ledger` repository.
 
-### Step 3: Add Environment Variables
-In the **Environment Variables** section, add:
-- `NEXT_PUBLIC_SUPABASE_URL`: `https://your-project.supabase.co`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: `your-anon-public-key`
+### Step 3: Configure Project Settings (Field-by-Field Reference)
 
-Click **Deploy**! Your app will be live within 1 minute with global CDN distribution and SSL.
+When importing your project, Vercel displays the **Configure Project** screen. Here is exactly what to enter into each field:
+
+| Field Name | What to Select / Enter | Notes & Guidance |
+| :--- | :--- | :--- |
+| **Vercel Scope / Team** | Select your account (e.g. `SD-Sagar (Hobby)`) | Choose the personal Hobby account or team where you want the project deployed. |
+| **Project Name** | `sd-ledger` | Defaults to your GitHub repo name. This defines your production domain: `https://sd-ledger.vercel.app` (or `sd-ledger-<username>.vercel.app`). |
+| **Framework Preset** | `Next.js` | Vercel automatically detects Next.js 16. Leave this untouched. |
+| **Root Directory** | `./` | Leave as `./` (project root). Only edit if the Next.js app is inside a monorepo subfolder. |
+| **Build and Output Settings** | Leave all toggles **Unchecked** (Default) | Vercel automatically uses `npm run build` (`next build`), output directory `.next`, and install command `npm install`. |
+| **Environment Variables** | **Add the 2 variables below** | Expand this accordion section to input your Supabase cloud credentials. |
+
+#### Environment Variables to Add:
+
+1. **Variable 1: Supabase URL**
+   - **Key**: `NEXT_PUBLIC_SUPABASE_URL`
+   - **Value**: Your Supabase Project URL (e.g., `https://xyzproject.supabase.co` from Supabase *Project Settings &rarr; API*)
+   - **Environments**: Keep all three checked (`Production`, `Preview`, `Development`)
+   - Click the **Add** button.
+
+2. **Variable 2: Supabase Anon Key**
+   - **Key**: `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - **Value**: Your Supabase `anon` public API key (long token starting with `eyJhb...` from Supabase *Project Settings &rarr; API*)
+   - **Environments**: Keep all three checked (`Production`, `Preview`, `Development`)
+   - Click the **Add** button.
+
+### Step 4: Click Deploy
+Click the blue **Deploy** button. Vercel will:
+- Clone your repository
+- Install all dependencies
+- Compile the Next.js production bundle with Turbopack
+- Deploy to worldwide edge CDN nodes with automatic SSL/HTTPS certificate within 60 seconds!
 
 ---
 

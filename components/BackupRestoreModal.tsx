@@ -95,45 +95,45 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/20 text-teal-400">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400">
               <Database className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Data Backup & Export</h2>
-              <p className="text-[11px] text-zinc-400">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Data Backup & Export</h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 Full offline ownership of your financial records
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-300">
-            <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-800 dark:text-rose-300">
+            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
             <span>{error}</span>
           </div>
         )}
         {success && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-900/60 bg-emerald-950/40 p-3 text-xs text-emerald-300">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+          <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
             <span>{success}</span>
           </div>
         )}
 
         <div className="mt-4 space-y-4">
           {/* Section 1: Exports */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 space-y-3 transition-colors">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
               Export Data
             </h3>
 
@@ -142,16 +142,16 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               <button
                 type="button"
                 onClick={exportCSV}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center transition-all hover:border-emerald-500/50 hover:bg-zinc-800/80"
+                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 text-center transition-all hover:border-emerald-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-sm"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
                   <FileSpreadsheet className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white block">
+                  <span className="text-xs font-semibold text-zinc-900 dark:text-white block">
                     Export to CSV
                   </span>
-                  <span className="text-[10px] text-zinc-400">
+                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
                     For Excel & Sheets ({transactions.length} rows)
                   </span>
                 </div>
@@ -161,16 +161,16 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               <button
                 type="button"
                 onClick={exportJSON}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-center transition-all hover:border-teal-500/50 hover:bg-zinc-800/80"
+                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-4 text-center transition-all hover:border-teal-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-sm"
               >
-                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-400">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
                   <FileJson className="h-5 w-5" />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-white block">
+                  <span className="text-xs font-semibold text-zinc-900 dark:text-white block">
                     Full JSON Backup
                   </span>
-                  <span className="text-[10px] text-zinc-400">
+                  <span className="text-[10px] text-zinc-500 dark:text-zinc-400">
                     Accounts, History & Audit Logs
                   </span>
                 </div>
@@ -179,11 +179,11 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
           </div>
 
           {/* Section 2: JSON Restore */}
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-4 space-y-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 space-y-3 transition-colors">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
               Restore from Backup
             </h3>
-            <p className="text-[11px] text-zinc-400">
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
               Select a previously exported SD-Ledger JSON backup file to restore.
             </p>
 
@@ -199,21 +199,21 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-700 bg-zinc-900/60 py-4 text-xs font-medium text-zinc-300 hover:border-teal-500 hover:text-white transition-colors"
+                className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900/60 py-4 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-teal-500 hover:text-zinc-900 dark:hover:text-white transition-colors"
               >
-                <Upload className="h-4 w-4 text-teal-400" />
+                <Upload className="h-4 w-4 text-teal-600 dark:text-teal-400" />
                 <span>Choose .json Backup File</span>
               </button>
             ) : (
               <div className="space-y-3">
-                <div className="rounded-xl border border-teal-900/60 bg-teal-950/20 p-3 text-xs">
-                  <div className="flex items-center justify-between text-teal-300 font-semibold mb-1">
+                <div className="rounded-xl border border-teal-300 dark:border-teal-900/60 bg-teal-50 dark:bg-teal-950/20 p-3 text-xs">
+                  <div className="flex items-center justify-between text-teal-700 dark:text-teal-300 font-semibold mb-1">
                     <span>Valid Backup Verified</span>
                     <span className="text-[10px]">{previewInfo.appName}</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-zinc-300 text-[11px]">
-                    <div>Accounts: <span className="text-white font-bold">{previewInfo.accountCount}</span></div>
-                    <div>Transactions: <span className="text-white font-bold">{previewInfo.transactionCount}</span></div>
+                  <div className="grid grid-cols-2 gap-2 text-zinc-700 dark:text-zinc-300 text-[11px]">
+                    <div>Accounts: <span className="text-zinc-900 dark:text-white font-bold">{previewInfo.accountCount}</span></div>
+                    <div>Transactions: <span className="text-zinc-900 dark:text-white font-bold">{previewInfo.transactionCount}</span></div>
                   </div>
                 </div>
 
@@ -232,7 +232,7 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
                       setSelectedFileContent(null);
                       setPreviewInfo(null);
                     }}
-                    className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-2 text-xs text-zinc-400 hover:text-white"
+                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-2 text-xs text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors"
                   >
                     Cancel
                   </button>

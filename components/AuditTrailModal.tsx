@@ -43,56 +43,56 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
     switch (action) {
       case 'CREATE':
         return {
-          icon: <PlusCircle className="h-3.5 w-3.5 text-emerald-400" />,
-          color: 'bg-emerald-950/40 text-emerald-400 border-emerald-900/60',
+          icon: <PlusCircle className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />,
+          color: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-900/60',
         };
       case 'UPDATE':
         return {
-          icon: <Edit3 className="h-3.5 w-3.5 text-indigo-400" />,
-          color: 'bg-indigo-950/40 text-indigo-400 border-indigo-900/60',
+          icon: <Edit3 className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />,
+          color: 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-900/60',
         };
       case 'DELETE':
         return {
-          icon: <Trash2 className="h-3.5 w-3.5 text-rose-400" />,
-          color: 'bg-rose-950/40 text-rose-400 border-rose-900/60',
+          icon: <Trash2 className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />,
+          color: 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-900/60',
         };
       case 'RECONCILE':
         return {
-          icon: <Scale className="h-3.5 w-3.5 text-teal-400" />,
-          color: 'bg-teal-950/40 text-teal-400 border-teal-900/60',
+          icon: <Scale className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />,
+          color: 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-400 border-teal-200 dark:border-teal-900/60',
         };
       case 'SETUP':
         return {
-          icon: <Sparkles className="h-3.5 w-3.5 text-amber-400" />,
-          color: 'bg-amber-950/40 text-amber-400 border-amber-900/60',
+          icon: <Sparkles className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />,
+          color: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-900/60',
         };
       default:
         return {
-          icon: <Database className="h-3.5 w-3.5 text-zinc-400" />,
-          color: 'bg-zinc-800 text-zinc-300 border-zinc-700',
+          icon: <Database className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />,
+          color: 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 border-zinc-200 dark:border-zinc-700',
         };
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+      <div className="relative w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl transition-colors">
         {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-800 shrink-0">
+        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-400">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/20 text-indigo-600 dark:text-indigo-400">
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Transaction Audit Trail</h2>
-              <p className="text-[11px] text-zinc-400">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Transaction Audit Trail</h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
                 Immutable chronological log of all ledger modifications
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-800 hover:text-white transition-colors"
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <X className="h-5 w-5" />
           </button>
@@ -101,13 +101,13 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
         {/* Search */}
         <div className="my-4 shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+            <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400 dark:text-zinc-500" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search audit events by summary, action, or entity..."
-              className="w-full rounded-xl border border-zinc-800 bg-zinc-900 py-2 pl-9 pr-3 text-xs text-white placeholder-zinc-500 focus:border-indigo-500 focus:outline-none"
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-2 pl-9 pr-3 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-500 focus:border-indigo-500 focus:outline-none transition-colors"
             />
           </div>
         </div>
@@ -126,7 +126,7 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
               return (
                 <div
                   key={log.id}
-                  className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 p-3 transition-colors hover:border-zinc-700"
+                  className="rounded-xl border border-zinc-200 dark:border-zinc-800/80 bg-zinc-50/60 dark:bg-zinc-900/40 p-3 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700"
                 >
                   <div
                     className="flex items-center justify-between cursor-pointer"
@@ -139,19 +139,19 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
                         {badge.icon}
                         <span>{log.action}</span>
                       </span>
-                      <span className="text-xs text-white font-medium">
+                      <span className="text-xs text-zinc-900 dark:text-white font-medium">
                         {log.summary}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-zinc-500 text-[11px]">
+                    <div className="flex items-center gap-2 text-zinc-500 dark:text-zinc-400 text-[11px]">
                       <span>{formatDisplayDateTime(log.created_at)}</span>
                       {log.details && (
                         <span>
                           {isExpanded ? (
-                            <ChevronDown className="h-3.5 w-3.5 text-zinc-400" />
+                            <ChevronDown className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
                           ) : (
-                            <ChevronRight className="h-3.5 w-3.5 text-zinc-400" />
+                            <ChevronRight className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
                           )}
                         </span>
                       )}
@@ -160,11 +160,11 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
 
                   {/* Expanded JSON Inspector */}
                   {isExpanded && log.details && (
-                    <div className="mt-3 pt-3 border-t border-zinc-800">
-                      <p className="text-[10px] font-semibold text-zinc-400 mb-1">
+                    <div className="mt-3 pt-3 border-t border-zinc-200 dark:border-zinc-800">
+                      <p className="text-[10px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">
                         Event Metadata & Snapshot Diff:
                       </p>
-                      <pre className="rounded-lg bg-zinc-950 p-2.5 text-[11px] font-mono text-zinc-300 overflow-x-auto max-h-48">
+                      <pre className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-950 p-2.5 text-[11px] font-mono text-zinc-800 dark:text-zinc-300 overflow-x-auto max-h-48">
                         {JSON.stringify(log.details, null, 2)}
                       </pre>
                     </div>
