@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Database,
   ArrowRight,
+  CloudUpload,
 } from 'lucide-react';
 
 interface BackupRestoreModalProps {
@@ -20,7 +21,7 @@ interface BackupRestoreModalProps {
 }
 
 export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps) {
-  const { transactions, accounts, exportCSV, exportJSON, restoreJSON } = useLedger();
+  const { transactions, accounts, exportCSV, exportJSON, restoreJSON, pushLocalDataToCloud } = useLedger();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFileContent, setSelectedFileContent] = useState<string | null>(null);
@@ -32,10 +33,24 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
   } | null>(null);
 
   const [isRestoring, setIsRestoring] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   if (!isOpen) return null;
+
+  const handleForcePush = async () => {
+    setIsPushing(true);
+    setError(null);
+    setSuccess(null);
+    const res = await pushLocalDataToCloud();
+    setIsPushing(false);
+    if (res.success) {
+      setSuccess(`Successfully uploaded ${res.count} transactions to Supabase Cloud! Your cloud ledger is now updated.`);
+    } else {
+      setError(res.error || 'Failed to upload local data to cloud.');
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     setError(null);
@@ -239,6 +254,30 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
                 </div>
               </div>
             )}
+          </div>
+
+          {/* Section 3: Push Local Ledger to Cloud */}
+          <div className="rounded-2xl border border-cyan-200 dark:border-cyan-900/60 bg-cyan-50/70 dark:bg-cyan-950/30 p-4 space-y-2.5 transition-colors">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-cyan-800 dark:text-cyan-300">
+                Push Local Ledger to Supabase Cloud
+              </h3>
+              <span className="text-[10px] bg-cyan-200/80 dark:bg-cyan-900/80 text-cyan-900 dark:text-cyan-200 px-2 py-0.5 rounded-full font-semibold">
+                Direct Cloud Sync
+              </span>
+            </div>
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-400 leading-relaxed">
+              Upload all local expenses, accounts, and transfers currently stored in this browser directly to your Supabase cloud database so they appear on Vercel and any other device.
+            </p>
+            <button
+              type="button"
+              disabled={isPushing}
+              onClick={handleForcePush}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 py-2.5 text-xs font-semibold text-white shadow-md transition-colors disabled:opacity-50"
+            >
+              <CloudUpload className={`h-4 w-4 ${isPushing ? 'animate-spin' : ''}`} />
+              <span>{isPushing ? 'Uploading to Supabase...' : 'Push Localhost Ledger to Supabase Cloud'}</span>
+            </button>
           </div>
         </div>
       </div>

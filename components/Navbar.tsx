@@ -40,6 +40,7 @@ export function Navbar({
     syncStatus,
     uploadOfflineToCloud,
     pullLatestFromCloud,
+    pushLocalDataToCloud,
     linkedCloudAccount,
     clearLocalData,
   } = useLedger();
@@ -49,8 +50,20 @@ export function Navbar({
   const [clearDataOnSwitch, setClearDataOnSwitch] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
+  const [isPushingCloud, setIsPushingCloud] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const handlePushClick = async () => {
+    if (!navigator.onLine) {
+      alert('Device is currently offline. Connect to the internet to push to cloud.');
+      return;
+    }
+    setIsPushingCloud(true);
+    await pushLocalDataToCloud();
+    setIsPushingCloud(false);
+    setShowMoreMenu(false);
+  };
 
   // Close mobile dropdown on outside click
   useEffect(() => {
@@ -182,11 +195,24 @@ export function Navbar({
               </div>
             )}
 
-            {/* Online mode indicator */}
+            {/* Online mode: Push Localhost Data to Cloud Button */}
             {!isDemoUser && (
-              <div className="hidden sm:flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-950/60 dark:bg-emerald-950/30 dark:text-emerald-400">
-                <Wifi className="h-3.5 w-3.5" />
-                <span className="hidden md:inline">Online Engine</span>
+              <div className="flex items-center gap-1 sm:gap-1.5">
+                <button
+                  type="button"
+                  onClick={handlePushClick}
+                  disabled={isPushingCloud}
+                  title="Push localhost ledger data directly to Supabase Cloud"
+                  className="flex items-center gap-1 sm:gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
+                >
+                  <CloudUpload className={`h-3.5 w-3.5 ${isPushingCloud ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">{isPushingCloud ? 'Pushing...' : 'Push to Cloud'}</span>
+                </button>
+
+                <div className="hidden lg:flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-950/60 dark:bg-emerald-950/30 dark:text-emerald-400">
+                  <Wifi className="h-3.5 w-3.5" />
+                  <span>Online Engine</span>
+                </div>
               </div>
             )}
 
@@ -305,6 +331,20 @@ export function Navbar({
                         <span>Switch Cloud Account</span>
                       </button>
                     </>
+                  )}
+
+                  {!isDemoUser && (
+                    <button
+                      onClick={() => {
+                        setShowMoreMenu(false);
+                        handlePushClick();
+                      }}
+                      disabled={isPushingCloud}
+                      className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left disabled:opacity-50"
+                    >
+                      <CloudUpload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 ${isPushingCloud ? 'animate-spin' : ''}`} />
+                      <span>Push Local Data to Cloud</span>
+                    </button>
                   )}
 
                   <button

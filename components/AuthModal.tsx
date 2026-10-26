@@ -187,7 +187,7 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
         )}
 
         {/* Tab Switcher */}
-        <div className="grid grid-cols-4 gap-1 p-1 mt-4 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-medium">
+        <div className="grid grid-cols-3 gap-1 p-1 mt-4 rounded-xl bg-zinc-900 border border-zinc-800 text-xs font-medium">
           <button
             onClick={() => handleTabChange('signin')}
             className={`py-1.5 rounded-lg transition-colors ${
@@ -218,13 +218,12 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
           >
             Forgot
           </button>
+          {/* Config Tab (Hidden) */}
           <button
+            type="button"
             onClick={() => handleTabChange('settings')}
-            className={`py-1.5 rounded-lg transition-colors flex items-center justify-center gap-1 ${
-              activeTab === 'settings'
-                ? 'bg-emerald-600 text-white font-semibold'
-                : 'text-zinc-400 hover:text-white'
-            }`}
+            style={{ display: 'none' }}
+            className="hidden"
           >
             <Database className="h-3 w-3" />
             <span>Config</span>
@@ -459,9 +458,9 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
           </form>
         )}
 
-        {/* TAB 4: SUPABASE CONFIGURATION */}
+        {/* TAB 4: SUPABASE CONFIGURATION (Hidden) */}
         {activeTab === 'settings' && (
-          <form onSubmit={handleSaveSupabaseConfig} className="mt-4 space-y-3.5">
+          <form onSubmit={handleSaveSupabaseConfig} style={{ display: 'none' }} className="hidden mt-4 space-y-3.5">
             <div className="rounded-lg border border-emerald-900/60 bg-emerald-950/20 p-3 text-xs text-emerald-300">
               <p className="font-semibold mb-1 flex items-center gap-1.5">
                 <ShieldCheck className="h-4 w-4 text-emerald-400" />

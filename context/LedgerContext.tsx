@@ -66,6 +66,7 @@ interface LedgerContextType {
   clearLinkedCloudAccount: () => void;
   uploadOfflineToCloud: () => Promise<SyncResult>;
   pullLatestFromCloud: () => Promise<{ success: boolean; count: number; error?: string }>;
+  pushLocalDataToCloud: () => Promise<{ success: boolean; count: number; error?: string }>;
 
   // Actions
   setupTwoAccounts: (
@@ -207,18 +208,40 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       // If pure online mode (authenticated Supabase user) and device is online:
       if (uid !== DEMO_USER_ID && supabase && navigator.onLine) {
         try {
-          const [accRes, txRes, recRes, logRes] = await Promise.all([
+          const [accRes, txRes, recRes, logRes, localTxs] = await Promise.all([
             supabase.from('accounts').select('*').eq('user_id', uid).order('account_index', { ascending: true }),
             supabase.from('transactions').select('*').eq('user_id', uid).order('transaction_date', { ascending: false }),
             supabase.from('reconciliations').select('*').eq('user_id', uid).order('reconciled_date', { ascending: false }),
             supabase.from('audit_logs').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+            idbGetTransactions(uid),
           ]);
+
+          const remoteTxMap = new Map<string, Transaction>();
+          if (txRes.data) {
+            (txRes.data as Transaction[]).forEach((rt) => remoteTxMap.set(rt.id, rt));
+          }
+
+          // RECOVERY: Push any local transactions created on this device that failed to reach Supabase
+          for (const lt of localTxs) {
+            if (!remoteTxMap.has(lt.id) && !lt.is_deleted) {
+              const { sync_status, ...cloudTx } = lt;
+              const { error: pushErr } = await supabase.from('transactions').upsert({
+                ...cloudTx,
+                user_id: uid,
+              }, { onConflict: 'id' });
+              if (!pushErr) {
+                remoteTxMap.set(lt.id, lt);
+              } else {
+                console.warn('Could not auto-sync local transaction to Supabase:', pushErr);
+              }
+            }
+          }
 
           if (accRes.data) {
             await idbSaveAccounts(accRes.data as Account[]);
           }
           if (txRes.data) {
-            await idbSaveTransactions(txRes.data as Transaction[]);
+            await idbSaveTransactions(Array.from(remoteTxMap.values()));
           }
           if (recRes.data) {
             for (const r of recRes.data) await idbSaveReconciliation(r as Reconciliation);
@@ -374,6 +397,131 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       return { success: false, count: 0, error: msg };
     }
   }, [linkedCloudUserId, linkedCloudAccount, refreshData, accounts.length]);
+
+  // Force push local browser ledger (accounts, transactions, reconciliations) straight to Supabase Cloud
+  const pushLocalDataToCloud = useCallback(async (): Promise<{ success: boolean; count: number; error?: string }> => {
+    if (!navigator.onLine) {
+      const msg = 'Device is currently offline. Connect to the internet to push data to cloud.';
+      setSyncMessage(msg);
+      return { success: false, count: 0, error: msg };
+    }
+    const supabase = getSupabase();
+    if (!supabase) {
+      const msg = 'Supabase client not initialized.';
+      setSyncMessage(msg);
+      return { success: false, count: 0, error: msg };
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const effectiveUid = session?.user?.id || (userId !== DEMO_USER_ID ? userId : linkedCloudUserId);
+    if (!effectiveUid) {
+      const msg = 'Please log in to your Supabase cloud account before uploading local ledger data.';
+      setSyncMessage(msg);
+      return { success: false, count: 0, error: msg };
+    }
+
+    setSyncStatus((prev) => ({ ...prev, isSyncing: true }));
+    try {
+      // 1. Fetch remote accounts
+      const { data: remoteAccs, error: accFetchErr } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq('user_id', effectiveUid);
+
+      if (accFetchErr) throw accFetchErr;
+
+      const remoteByName = new Map<string, Account>();
+      const remoteById = new Map<string, Account>();
+      ((remoteAccs as Account[]) || []).forEach((a) => {
+        remoteByName.set(a.display_name.trim().toLowerCase(), a);
+        remoteById.set(a.id, a);
+      });
+
+      // 2. Fetch local accounts from this user AND demo store
+      const userAccs = await idbGetAccounts(effectiveUid);
+      const demoAccs = await idbGetAccounts(DEMO_USER_ID);
+      const allLocalAccs = [...userAccs, ...demoAccs];
+      const localAccMap = new Map<string, Account>();
+      allLocalAccs.forEach((a) => {
+        if (!localAccMap.has(a.id)) localAccMap.set(a.id, a);
+      });
+
+      // Push or link accounts
+      const accountIdMapping = new Map<string, string>(); // localId -> cloudId
+      for (const local of Array.from(localAccMap.values())) {
+        const normName = local.display_name.trim().toLowerCase();
+        const matchingRemote = remoteByName.get(normName) || remoteById.get(local.id);
+        if (matchingRemote) {
+          accountIdMapping.set(local.id, matchingRemote.id);
+        } else {
+          // New account, push to Supabase
+          const cleanAcc = { ...local, user_id: effectiveUid };
+          delete (cleanAcc as Record<string, unknown>).sync_status;
+          const { error: insErr } = await supabase.from('accounts').upsert(cleanAcc, { onConflict: 'id' });
+          if (!insErr) {
+            accountIdMapping.set(local.id, local.id);
+            remoteById.set(local.id, cleanAcc);
+          }
+        }
+      }
+
+      // 3. Gather all local transactions from this user AND demo store
+      const userTxs = await idbGetTransactions(effectiveUid);
+      const demoTxs = await idbGetTransactions(DEMO_USER_ID);
+      const allLocalTxs = [...userTxs, ...demoTxs];
+      const txMap = new Map<string, Transaction>();
+      allLocalTxs.forEach((t) => {
+        if (!txMap.has(t.id) && !t.is_deleted) txMap.set(t.id, t);
+      });
+
+      let pushed = 0;
+      for (const tx of Array.from(txMap.values())) {
+        const fromId = tx.from_account_id ? (accountIdMapping.get(tx.from_account_id) || tx.from_account_id) : null;
+        const toId = tx.to_account_id ? (accountIdMapping.get(tx.to_account_id) || tx.to_account_id) : null;
+
+        const { sync_status, ...cloudTx } = tx;
+        const payload = {
+          ...cloudTx,
+          user_id: effectiveUid,
+          from_account_id: fromId,
+          to_account_id: toId,
+        };
+
+        const { error: txErr } = await supabase.from('transactions').upsert(payload, { onConflict: 'id' });
+        if (!txErr) {
+          pushed++;
+          await idbSaveTransaction({ ...tx, user_id: effectiveUid, sync_status: 'synced' });
+        } else {
+          console.warn('Failed to push transaction to Supabase:', txErr.message);
+        }
+      }
+
+      // 4. Reconciliations
+      const userRecs = await idbGetReconciliations(effectiveUid);
+      const demoRecs = await idbGetReconciliations(DEMO_USER_ID);
+      const allRecs = [...userRecs, ...demoRecs];
+      for (const rec of allRecs) {
+        const accId = accountIdMapping.get(rec.account_id) || rec.account_id;
+        await supabase.from('reconciliations').upsert({
+          ...rec,
+          user_id: effectiveUid,
+          account_id: accId,
+        }, { onConflict: 'id' });
+      }
+
+      await refreshData(effectiveUid);
+      setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
+      const msg = `Successfully uploaded ${pushed} transactions to Supabase Cloud!`;
+      setSyncMessage(msg);
+      setTimeout(() => setSyncMessage(null), 5000);
+      return { success: true, count: pushed };
+    } catch (err: unknown) {
+      setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
+      const msg = err instanceof Error ? err.message : 'Failed to push local data to cloud';
+      setSyncMessage(msg);
+      return { success: false, count: 0, error: msg };
+    }
+  }, [userId, linkedCloudUserId, refreshData]);
 
   // Upload offline changes to linked cloud account (MANUAL ACTION ONLY - never runs automatically)
   const uploadOfflineToCloud = useCallback(async (): Promise<SyncResult> => {
@@ -965,7 +1113,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('transactions').insert(tx);
+          const { sync_status, ...cloudTx } = tx;
+          const { error } = await supabase.from('transactions').insert(cloudTx);
+          if (error) {
+            console.error('Failed to insert expense into Supabase:', error.message);
+          }
         } catch (cloudErr) {
           console.warn('Could not insert transaction to Supabase:', cloudErr);
         }
@@ -1041,7 +1193,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('transactions').insert(tx);
+          const { sync_status, ...cloudTx } = tx;
+          const { error } = await supabase.from('transactions').insert(cloudTx);
+          if (error) {
+            console.error('Failed to insert income into Supabase:', error.message);
+          }
         } catch (cloudErr) {
           console.warn('Could not insert income to Supabase:', cloudErr);
         }
@@ -1119,7 +1275,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('transactions').insert(tx);
+          const { sync_status, ...cloudTx } = tx;
+          const { error } = await supabase.from('transactions').insert(cloudTx);
+          if (error) {
+            console.error('Failed to insert transfer into Supabase:', error.message);
+          }
         } catch (cloudErr) {
           console.warn('Could not insert transfer to Supabase:', cloudErr);
         }
@@ -1180,7 +1340,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('transactions').upsert(cleanUpdated);
+          const { sync_status, ...cloudTx } = cleanUpdated;
+          const { error } = await supabase.from('transactions').upsert(cloudTx);
+          if (error) {
+            console.error('Failed to update transaction in Supabase:', error.message);
+          }
         } catch (cloudErr) {
           console.warn('Could not update transaction in Supabase:', cloudErr);
         }
@@ -1385,6 +1549,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         clearLinkedCloudAccount,
         uploadOfflineToCloud,
         pullLatestFromCloud,
+        pushLocalDataToCloud,
         setupTwoAccounts,
         addAccount,
         deleteAccount,

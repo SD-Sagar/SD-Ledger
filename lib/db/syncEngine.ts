@@ -355,10 +355,14 @@ export async function processSync(
         if (!remoteTxMap.has(localTx.id) && !localTx.is_deleted) {
           const cleanTx: Record<string, unknown> = { ...localTx, user_id: userId };
           delete cleanTx.sync_status;
-          await supabase.from('transactions').upsert(cleanTx, { onConflict: 'id' });
-          await idbSaveTransaction({ ...localTx, user_id: userId });
-          await idbSaveTransaction({ ...localTx, user_id: DEMO_USER_ID });
-          pushedCount++;
+          const { error: txErr } = await supabase.from('transactions').upsert(cleanTx, { onConflict: 'id' });
+          if (txErr) {
+            console.error('Failed to upsert transaction during upload:', txErr.message);
+          } else {
+            await idbSaveTransaction({ ...localTx, user_id: userId });
+            await idbSaveTransaction({ ...localTx, user_id: DEMO_USER_ID });
+            pushedCount++;
+          }
         }
       }
     }
