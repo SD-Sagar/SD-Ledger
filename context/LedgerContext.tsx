@@ -65,6 +65,7 @@ interface LedgerContextType {
   setLinkedCloudAccount: (email: string, uid: string) => void;
   clearLinkedCloudAccount: () => void;
   uploadOfflineToCloud: () => Promise<SyncResult>;
+  pullLatestFromCloud: () => Promise<{ success: boolean; count: number; error?: string }>;
 
   // Actions
   setupTwoAccounts: (
@@ -197,11 +198,12 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Load user data: In online mode fetches from Supabase if online; in offline mode uses IndexedDB
+  // Load user data: In online mode fetches from Supabase if online; in offline mode automatically populates from linked cloud first!
   const refreshData = useCallback(async (uid: string) => {
     if (!uid) return;
     try {
       const supabase = getSupabase();
+
       // If pure online mode (authenticated Supabase user) and device is online:
       if (uid !== DEMO_USER_ID && supabase && navigator.onLine) {
         try {
@@ -229,6 +231,97 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      // OFFLINE MODE: Always populate first with current cloud data before showing to user!
+      if (uid === DEMO_USER_ID && supabase && navigator.onLine) {
+        let linkedUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') : null);
+
+        // Fallback: If not set in localStorage, check active Supabase auth session
+        if (!linkedUid) {
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user?.id) {
+              linkedUid = session.user.id;
+              setLinkedCloudAccount(session.user.email || 'Cloud User', linkedUid);
+            }
+          } catch (sessionErr) {
+            console.warn('Session check error in offline mode:', sessionErr);
+          }
+        }
+
+        if (linkedUid) {
+          try {
+            const [accRes, txRes, recRes, logRes, localTxs, localQueue] = await Promise.all([
+              supabase.from('accounts').select('*').eq('user_id', linkedUid).order('account_index', { ascending: true }),
+              supabase.from('transactions').select('*').eq('user_id', linkedUid).order('transaction_date', { ascending: false }),
+              supabase.from('reconciliations').select('*').eq('user_id', linkedUid).order('reconciled_date', { ascending: false }),
+              supabase.from('audit_logs').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }),
+              idbGetTransactions(DEMO_USER_ID),
+              idbGetSyncQueue(),
+            ]);
+
+            if (accRes.data && accRes.data.length > 0) {
+              const remoteAccIds = new Set(accRes.data.map((a: Account) => a.id));
+              const localAccs = await idbGetAccounts(DEMO_USER_ID);
+              for (const la of localAccs) {
+                if (!remoteAccIds.has(la.id) && !localQueue.some((q) => q.payload?.id === la.id)) {
+                  await idbDeleteAccount(la.id, DEMO_USER_ID);
+                }
+              }
+
+              const offlineAccounts: Account[] = accRes.data.map((a: Account) => ({
+                ...a,
+                user_id: DEMO_USER_ID,
+              }));
+              await idbSaveAccounts(offlineAccounts);
+            }
+
+            if (txRes.data) {
+              const remoteTxIds = new Set(txRes.data.map((t: Transaction) => t.id));
+              for (const lt of localTxs) {
+                if (
+                  !remoteTxIds.has(lt.id) &&
+                  lt.sync_status !== 'pending' &&
+                  !localQueue.some((q) => q.payload?.id === lt.id)
+                ) {
+                  await idbDeleteTransaction(lt.id, DEMO_USER_ID);
+                }
+              }
+
+              const remoteTxs: Transaction[] = txRes.data.map((t: Transaction) => ({
+                ...t,
+                user_id: DEMO_USER_ID,
+                sync_status: 'synced',
+              }));
+
+              // Preserve any pending local offline entries
+              const pendingLocalTxs = localTxs.filter(
+                (lt) => lt.sync_status === 'pending' || localQueue.some((q) => q.payload?.id === lt.id)
+              );
+
+              const mergedTxs = new Map<string, Transaction>();
+              remoteTxs.forEach((rt) => mergedTxs.set(rt.id, rt));
+              pendingLocalTxs.forEach((pt) => mergedTxs.set(pt.id, pt));
+
+              await idbSaveTransactions(Array.from(mergedTxs.values()));
+            }
+
+            if (recRes.data) {
+              for (const r of recRes.data) {
+                await idbSaveReconciliation({ ...(r as Reconciliation), user_id: DEMO_USER_ID });
+              }
+            }
+
+            if (logRes.data) {
+              for (const l of logRes.data) {
+                await idbSaveAuditLog({ ...(l as AuditLog), user_id: DEMO_USER_ID });
+              }
+            }
+          } catch (offlinePullErr) {
+            console.warn('Could not auto-pull latest cloud data for offline mode, using cached IndexedDB:', offlinePullErr);
+          }
+        }
+      }
+
       const [accs, txs, recs, logs, lastSync, queue] = await Promise.all([
         idbGetAccounts(uid),
         idbGetTransactions(uid),
@@ -252,7 +345,35 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load local ledger data:', err);
       setIsInitialized(true);
     }
-  }, []);
+  }, [linkedCloudUserId]);
+
+  // Pull latest cloud data manually on demand
+  const pullLatestFromCloud = useCallback(async (): Promise<{ success: boolean; count: number; error?: string }> => {
+    if (!navigator.onLine) {
+      const msg = 'Device is currently offline. Connect to the internet to pull cloud data.';
+      setSyncMessage(msg);
+      return { success: false, count: 0, error: msg };
+    }
+    const targetUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') : null);
+    if (!targetUid) {
+      const msg = 'No cloud account linked yet.';
+      setSyncMessage(msg);
+      return { success: false, count: 0, error: msg };
+    }
+    setSyncStatus((prev) => ({ ...prev, isSyncing: true }));
+    try {
+      await refreshData(DEMO_USER_ID);
+      setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
+      const msg = `Successfully pulled latest cloud records from ${linkedCloudAccount || 'cloud'}!`;
+      setSyncMessage(msg);
+      setTimeout(() => setSyncMessage(null), 4000);
+      return { success: true, count: accounts.length };
+    } catch (err: unknown) {
+      setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
+      const msg = err instanceof Error ? err.message : 'Failed to pull cloud records';
+      return { success: false, count: 0, error: msg };
+    }
+  }, [linkedCloudUserId, linkedCloudAccount, refreshData, accounts.length]);
 
   // Upload offline changes to linked cloud account (MANUAL ACTION ONLY - never runs automatically)
   const uploadOfflineToCloud = useCallback(async (): Promise<SyncResult> => {
@@ -1263,6 +1384,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         setLinkedCloudAccount,
         clearLinkedCloudAccount,
         uploadOfflineToCloud,
+        pullLatestFromCloud,
         setupTwoAccounts,
         addAccount,
         deleteAccount,
