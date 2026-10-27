@@ -3,13 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { FinancialNote, NoteType, NoteColor } from '../lib/types';
-import { getTodayKolkata } from '../lib/utils/formatters';
 import {
   X,
   Pin,
-  Calendar,
   AlertCircle,
-  CheckCircle2,
   ArrowUpRight,
   ArrowDownLeft,
   StickyNote,
@@ -22,12 +19,12 @@ interface AddEditNoteModalProps {
 }
 
 const COLOR_OPTIONS: { id: NoteColor; label: string; bg: string; border: string; dot: string }[] = [
-  { id: 'yellow', label: 'Canary Yellow', bg: 'bg-amber-500/10 dark:bg-amber-500/20', border: 'border-amber-400/40', dot: 'bg-amber-400' },
-  { id: 'mint', label: 'Emerald Mint', bg: 'bg-emerald-500/10 dark:bg-emerald-500/20', border: 'border-emerald-400/40', dot: 'bg-emerald-400' },
-  { id: 'rose', label: 'Coral Rose', bg: 'bg-rose-500/10 dark:bg-rose-500/20', border: 'border-rose-400/40', dot: 'bg-rose-400' },
-  { id: 'sky', label: 'Sky Azure', bg: 'bg-sky-500/10 dark:bg-sky-500/20', border: 'border-sky-400/40', dot: 'bg-sky-400' },
-  { id: 'lavender', label: 'Soft Lavender', bg: 'bg-purple-500/10 dark:bg-purple-500/20', border: 'border-purple-400/40', dot: 'bg-purple-400' },
-  { id: 'slate', label: 'Charcoal Slate', bg: 'bg-slate-500/10 dark:bg-slate-500/20', border: 'border-slate-400/40', dot: 'bg-slate-400' },
+  { id: 'yellow', label: 'Canary Yellow', bg: 'bg-amber-500/10 dark:bg-amber-500/20', border: 'border-amber-400/50', dot: 'bg-amber-400' },
+  { id: 'mint', label: 'Emerald Mint', bg: 'bg-emerald-500/10 dark:bg-emerald-500/20', border: 'border-emerald-400/50', dot: 'bg-emerald-400' },
+  { id: 'rose', label: 'Coral Rose', bg: 'bg-rose-500/10 dark:bg-rose-500/20', border: 'border-rose-400/50', dot: 'bg-rose-400' },
+  { id: 'sky', label: 'Sky Azure', bg: 'bg-sky-500/10 dark:bg-sky-500/20', border: 'border-sky-400/50', dot: 'bg-sky-400' },
+  { id: 'lavender', label: 'Soft Lavender', bg: 'bg-purple-500/10 dark:bg-purple-500/20', border: 'border-purple-400/50', dot: 'bg-purple-400' },
+  { id: 'slate', label: 'Charcoal Slate', bg: 'bg-zinc-500/10 dark:bg-zinc-500/20', border: 'border-zinc-400/50', dot: 'bg-zinc-400' },
 ];
 
 export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteModalProps) {
@@ -136,40 +133,40 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-lg bg-surface-card border border-surface-border rounded-2xl shadow-2xl overflow-hidden animate-scale-up"
+        className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl text-zinc-900 dark:text-zinc-100 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-surface-border bg-surface-muted/30">
+        <div className="flex items-center justify-between pb-4 border-b border-zinc-100 dark:border-zinc-800">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/30">
               <StickyNote className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-semibold text-text-primary">
+              <h2 className="text-base font-bold text-zinc-900 dark:text-white">
                 {noteToEdit ? 'Edit Financial Note' : 'New Note / Friend Due (Khata)'}
               </h2>
-              <p className="text-xs text-text-muted">
-                Cloud synced across devices & accessible offline
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Cloud synced across all devices &amp; accessible offline
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface-muted transition-colors"
+            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        {/* Modal Body Form */}
+        <form onSubmit={handleSubmit} className="space-y-4 pt-4 max-h-[75vh] overflow-y-auto">
           {error && (
-            <div className="flex items-start gap-2.5 p-3 text-xs text-rose-500 bg-rose-500/10 border border-rose-500/20 rounded-xl">
+            <div className="flex items-start gap-2.5 p-3 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl">
               <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -177,17 +174,17 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
 
           {/* Type Selector Tabs */}
           <div>
-            <label className="block text-xs font-medium text-text-muted mb-1.5">
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
               Entry Type
             </label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-surface-muted/50 rounded-xl border border-surface-border">
+            <div className="grid grid-cols-3 gap-2 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
               <button
                 type="button"
                 onClick={() => setType('THEY_OWE_ME')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
                   type === 'THEY_OWE_ME'
-                    ? 'bg-emerald-500 text-white shadow-sm font-semibold'
-                    : 'text-text-muted hover:text-text-primary hover:bg-surface-card'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
                 <ArrowDownLeft className="w-3.5 h-3.5" />
@@ -196,10 +193,10 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
               <button
                 type="button"
                 onClick={() => setType('I_OWE_THEM')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
                   type === 'I_OWE_THEM'
-                    ? 'bg-rose-500 text-white shadow-sm font-semibold'
-                    : 'text-text-muted hover:text-text-primary hover:bg-surface-card'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
                 <ArrowUpRight className="w-3.5 h-3.5" />
@@ -208,10 +205,10 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
               <button
                 type="button"
                 onClick={() => setType('REMINDER')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-medium transition-all ${
+                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
                   type === 'REMINDER'
-                    ? 'bg-indigo-500 text-white shadow-sm font-semibold'
-                    : 'text-text-muted hover:text-text-primary hover:bg-surface-card'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                 }`}
               >
                 <StickyNote className="w-3.5 h-3.5" />
@@ -222,8 +219,8 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
 
           {/* Title / Friend Name */}
           <div>
-            <label className="block text-xs font-medium text-text-muted mb-1.5">
-              {type === 'REMINDER' ? 'Note Title / Purpose' : 'Friend Name / Reason *'}
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+              {type === 'REMINDER' ? 'Note Title / Purpose *' : 'Friend Name / Reason *'}
             </label>
             <input
               type="text"
@@ -236,7 +233,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
                   ? 'e.g. Priya (Electricity bill split)'
                   : 'e.g. Pay annual car insurance next week'
               }
-              className="w-full px-3.5 py-2.5 text-sm bg-surface-muted/40 border border-surface-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
               required
             />
           </div>
@@ -244,11 +241,11 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
           {/* Amount & Due Date in 2 columns */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
                 Amount (₹) {type === 'REMINDER' ? '(Optional)' : '*'}
               </label>
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-text-muted font-semibold">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-zinc-400 dark:text-zinc-500 font-semibold">
                   ₹
                 </span>
                 <input
@@ -258,14 +255,14 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full pl-8 pr-3.5 py-2.5 text-sm bg-surface-muted/40 border border-surface-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-2.5 pl-8 pr-3.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
                   required={type !== 'REMINDER'}
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-text-muted mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
                 Due Date / Target Date (Optional)
               </label>
               <div className="relative">
@@ -273,7 +270,8 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-surface-muted/40 border border-surface-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-2.5 px-3.5 text-sm text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  style={{ colorScheme: 'light dark' }}
                 />
               </div>
             </div>
@@ -281,7 +279,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
 
           {/* Description / Extra Details */}
           <div>
-            <label className="block text-xs font-medium text-text-muted mb-1.5">
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
               Description / Notes (Optional)
             </label>
             <textarea
@@ -289,13 +287,13 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add details, UPI transaction reference, phone number, or notes..."
-              className="w-full px-3.5 py-2 text-sm bg-surface-muted/40 border border-surface-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary resize-none"
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors resize-none"
             />
           </div>
 
           {/* Color Picker */}
           <div>
-            <label className="block text-xs font-medium text-text-muted mb-1.5">
+            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
               Card Color
             </label>
             <div className="flex items-center gap-2 flex-wrap">
@@ -305,10 +303,10 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
                   type="button"
                   onClick={() => setCardColor(c.id)}
                   title={c.label}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
                     cardColor === c.id
-                      ? `${c.bg} ${c.border} ring-2 ring-brand-primary text-text-primary font-semibold shadow-sm`
-                      : 'border-surface-border bg-surface-muted/30 text-text-muted hover:text-text-primary'
+                      ? `${c.bg} ${c.border} ring-2 ring-emerald-500 text-zinc-900 dark:text-white shadow-sm`
+                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
                   }`}
                 >
                   <span className={`w-3 h-3 rounded-full ${c.dot}`} />
@@ -325,9 +323,9 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
                 type="checkbox"
                 checked={isPinned}
                 onChange={(e) => setIsPinned(e.target.checked)}
-                className="w-4 h-4 rounded border-surface-border text-brand-primary focus:ring-brand-primary/30"
+                className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-700 text-amber-500 focus:ring-amber-500"
               />
-              <span className="text-xs font-medium text-text-primary flex items-center gap-1">
+              <span className="text-xs font-semibold text-zinc-900 dark:text-white flex items-center gap-1">
                 <Pin className="w-3.5 h-3.5 text-amber-500" />
                 Pin to top of sticky board
               </span>
@@ -335,19 +333,19 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
           </div>
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-surface-border">
+          <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-zinc-100 dark:border-zinc-800">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 text-xs font-medium text-text-muted hover:text-text-primary bg-surface-muted/50 hover:bg-surface-muted rounded-xl transition-colors"
+              className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 text-xs font-semibold text-white bg-brand-primary hover:bg-brand-primary/90 rounded-xl shadow-sm transition-all disabled:opacity-50"
+              className="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
             >
               {isSubmitting ? 'Saving...' : noteToEdit ? 'Save Changes' : 'Create Note'}
             </button>

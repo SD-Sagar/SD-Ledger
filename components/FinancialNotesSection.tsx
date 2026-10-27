@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo } from 'react';
 import { useLedger } from '../context/LedgerContext';
-import { FinancialNote, NoteType } from '../lib/types';
+import { FinancialNote } from '../lib/types';
 import { formatINR, getTodayKolkata } from '../lib/utils/formatters';
 import { AddEditNoteModal } from './AddEditNoteModal';
 import { SettleNoteModal } from './SettleNoteModal';
@@ -13,7 +13,6 @@ import {
   CheckCircle2,
   Calendar,
   AlertCircle,
-  Clock,
   Trash2,
   Edit2,
   RotateCcw,
@@ -39,46 +38,46 @@ const COLOR_STYLES: Record<
   }
 > = {
   yellow: {
-    bg: 'bg-amber-500/10 dark:bg-amber-500/15',
-    border: 'border-amber-400/40 dark:border-amber-500/30',
-    accent: 'text-amber-600 dark:text-amber-400',
-    tape: 'bg-amber-400/30',
+    bg: 'bg-amber-50 dark:bg-amber-950/20',
+    border: 'border-amber-300 dark:border-amber-700/50',
+    accent: 'text-amber-700 dark:text-amber-400',
+    tape: 'bg-amber-300/40 dark:bg-amber-600/30',
     text: 'text-amber-950 dark:text-amber-100',
   },
   mint: {
-    bg: 'bg-emerald-500/10 dark:bg-emerald-500/15',
-    border: 'border-emerald-400/40 dark:border-emerald-500/30',
-    accent: 'text-emerald-600 dark:text-emerald-400',
-    tape: 'bg-emerald-400/30',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/20',
+    border: 'border-emerald-300 dark:border-emerald-700/50',
+    accent: 'text-emerald-700 dark:text-emerald-400',
+    tape: 'bg-emerald-300/40 dark:bg-emerald-600/30',
     text: 'text-emerald-950 dark:text-emerald-100',
   },
   rose: {
-    bg: 'bg-rose-500/10 dark:bg-rose-500/15',
-    border: 'border-rose-400/40 dark:border-rose-500/30',
-    accent: 'text-rose-600 dark:text-rose-400',
-    tape: 'bg-rose-400/30',
+    bg: 'bg-rose-50 dark:bg-rose-950/20',
+    border: 'border-rose-300 dark:border-rose-700/50',
+    accent: 'text-rose-700 dark:text-rose-400',
+    tape: 'bg-rose-300/40 dark:bg-rose-600/30',
     text: 'text-rose-950 dark:text-rose-100',
   },
   sky: {
-    bg: 'bg-sky-500/10 dark:bg-sky-500/15',
-    border: 'border-sky-400/40 dark:border-sky-500/30',
-    accent: 'text-sky-600 dark:text-sky-400',
-    tape: 'bg-sky-400/30',
+    bg: 'bg-sky-50 dark:bg-sky-950/20',
+    border: 'border-sky-300 dark:border-sky-700/50',
+    accent: 'text-sky-700 dark:text-sky-400',
+    tape: 'bg-sky-300/40 dark:bg-sky-600/30',
     text: 'text-sky-950 dark:text-sky-100',
   },
   lavender: {
-    bg: 'bg-purple-500/10 dark:bg-purple-500/15',
-    border: 'border-purple-400/40 dark:border-purple-500/30',
-    accent: 'text-purple-600 dark:text-purple-400',
-    tape: 'bg-purple-400/30',
+    bg: 'bg-purple-50 dark:bg-purple-950/20',
+    border: 'border-purple-300 dark:border-purple-700/50',
+    accent: 'text-purple-700 dark:text-purple-400',
+    tape: 'bg-purple-300/40 dark:bg-purple-600/30',
     text: 'text-purple-950 dark:text-purple-100',
   },
   slate: {
-    bg: 'bg-slate-500/10 dark:bg-slate-500/15',
-    border: 'border-slate-400/40 dark:border-slate-500/30',
-    accent: 'text-slate-600 dark:text-slate-400',
-    tape: 'bg-slate-400/30',
-    text: 'text-slate-900 dark:text-slate-100',
+    bg: 'bg-zinc-50 dark:bg-zinc-900/40',
+    border: 'border-zinc-300 dark:border-zinc-700/60',
+    accent: 'text-zinc-700 dark:text-zinc-300',
+    tape: 'bg-zinc-300/40 dark:bg-zinc-600/30',
+    text: 'text-zinc-900 dark:text-zinc-100',
   },
 };
 
@@ -170,78 +169,80 @@ export function FinancialNotesSection() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header & KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
         {/* Total Receivable */}
-        <div className="p-4 bg-surface-card border border-surface-border rounded-2xl shadow-sm flex items-center justify-between">
+        <div className="p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-text-muted flex items-center gap-1.5">
-              <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-500" />
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <ArrowDownLeft className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               They Owe You (Receivable)
             </span>
-            <div className="text-xl font-bold font-mono text-emerald-500 mt-1">
+            <div className="text-xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
               {formatINR(summary.receivable)}
             </div>
-            <span className="text-[11px] text-text-muted mt-0.5 block">
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 block">
               Active friend dues to collect
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <TrendingUp className="w-5 h-5" />
           </div>
         </div>
 
         {/* Total Payable */}
-        <div className="p-4 bg-surface-card border border-surface-border rounded-2xl shadow-sm flex items-center justify-between">
+        <div className="p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-text-muted flex items-center gap-1.5">
-              <ArrowUpRight className="w-3.5 h-3.5 text-rose-500" />
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <ArrowUpRight className="w-3.5 h-3.5 text-rose-600 dark:text-rose-400" />
               You Owe Them (Payable)
             </span>
-            <div className="text-xl font-bold font-mono text-rose-500 mt-1">
+            <div className="text-xl font-extrabold font-mono text-rose-600 dark:text-rose-400 mt-1">
               {formatINR(summary.payable)}
             </div>
-            <span className="text-[11px] text-text-muted mt-0.5 block">
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 block">
               Pending debts to return
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-500">
+          <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-400">
             <TrendingDown className="w-5 h-5" />
           </div>
         </div>
 
         {/* Net Dues Position */}
-        <div className="p-4 bg-surface-card border border-surface-border rounded-2xl shadow-sm flex items-center justify-between">
+        <div className="p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-text-muted flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-brand-primary" />
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               Net Due Position
             </span>
             <div
-              className={`text-xl font-bold font-mono mt-1 ${
-                summary.net >= 0 ? 'text-emerald-500' : 'text-rose-500'
+              className={`text-xl font-extrabold font-mono mt-1 ${
+                summary.net >= 0
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-rose-600 dark:text-rose-400'
               }`}
             >
               {summary.net >= 0 ? `+${formatINR(summary.net)}` : formatINR(summary.net)}
             </div>
-            <span className="text-[11px] text-text-muted mt-0.5 block">
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 block">
               {summary.net >= 0 ? 'Net surplus to receive' : 'Net balance to pay'}
             </span>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-brand-primary/10 flex items-center justify-center text-brand-primary">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <Sparkles className="w-5 h-5" />
           </div>
         </div>
 
         {/* Quick Action Button */}
-        <div className="p-4 bg-gradient-to-br from-brand-primary/10 to-indigo-500/10 border border-brand-primary/20 rounded-2xl shadow-sm flex flex-col justify-between">
+        <div className="p-4 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-white dark:to-zinc-950 border border-emerald-500/20 rounded-2xl shadow-sm flex flex-col justify-between">
           <div>
-            <span className="text-xs font-semibold text-text-primary">
+            <span className="text-xs font-bold text-zinc-900 dark:text-white">
               Financial Sticky Notes
             </span>
-            <p className="text-[11px] text-text-muted mt-0.5">
-              Track friend dues, khata & settle into bank accounts
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-tight">
+              Track friend dues, khata &amp; settle into accounts
             </p>
           </div>
           <button
@@ -249,7 +250,7 @@ export function FinancialNotesSection() {
               setNoteToEdit(null);
               setIsAddModalOpen(true);
             }}
-            className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
+            className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
           >
             <Plus className="w-4 h-4" />
             <span>New Note / Due</span>
@@ -258,55 +259,55 @@ export function FinancialNotesSection() {
       </div>
 
       {/* Toolbar: Filter Tabs & Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
         {/* Segmented Filter Tabs */}
-        <div className="flex items-center gap-1 p-1 bg-surface-card border border-surface-border rounded-xl overflow-x-auto scrollbar-none">
+        <div className="flex items-center gap-1 p-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto scrollbar-none shadow-xs">
           <button
             onClick={() => setActiveTab('active')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === 'active'
-                ? 'bg-brand-primary text-white shadow-xs font-semibold'
-                : 'text-text-muted hover:text-text-primary hover:bg-surface-muted/50'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
             Active ({summary.activeCount})
           </button>
           <button
             onClick={() => setActiveTab('THEY_OWE_ME')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === 'THEY_OWE_ME'
-                ? 'bg-emerald-600 text-white shadow-xs font-semibold'
-                : 'text-text-muted hover:text-text-primary hover:bg-surface-muted/50'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
             They Owe Me
           </button>
           <button
             onClick={() => setActiveTab('I_OWE_THEM')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === 'I_OWE_THEM'
-                ? 'bg-rose-600 text-white shadow-xs font-semibold'
-                : 'text-text-muted hover:text-text-primary hover:bg-surface-muted/50'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
             I Owe Them
           </button>
           <button
             onClick={() => setActiveTab('REMINDER')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === 'REMINDER'
-                ? 'bg-indigo-600 text-white shadow-xs font-semibold'
-                : 'text-text-muted hover:text-text-primary hover:bg-surface-muted/50'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
             Reminders
           </button>
           <button
             onClick={() => setActiveTab('resolved')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
               activeTab === 'resolved'
-                ? 'bg-surface-muted text-text-primary shadow-xs font-semibold'
-                : 'text-text-muted hover:text-text-primary hover:bg-surface-muted/50'
+                ? 'bg-zinc-800 text-white shadow-xs'
+                : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
             Settled ({summary.resolvedCount})
@@ -315,31 +316,31 @@ export function FinancialNotesSection() {
 
         {/* Search Input */}
         <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400 dark:text-zinc-500" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search notes or friends..."
-            className="w-full pl-9 pr-3.5 py-1.5 text-xs bg-surface-card border border-surface-border rounded-xl text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-brand-primary/30 focus:border-brand-primary"
+            className="w-full pl-9 pr-3.5 py-1.5 text-xs bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
           />
         </div>
       </div>
 
       {/* Sticky Notes Grid */}
       {filteredNotes.length === 0 ? (
-        <div className="text-center py-16 px-4 bg-surface-card border border-surface-border rounded-2xl">
+        <div className="text-center py-16 px-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs">
           <div className="w-12 h-12 mx-auto rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center mb-3">
             <StickyNote className="w-6 h-6" />
           </div>
-          <h3 className="text-sm font-semibold text-text-primary">
+          <h3 className="text-sm font-bold text-zinc-900 dark:text-white">
             {searchQuery
               ? 'No matching notes found'
               : activeTab === 'resolved'
               ? 'No settled matters yet'
               : 'Your sticky board is clear!'}
           </h3>
-          <p className="text-xs text-text-muted mt-1 max-w-sm mx-auto">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1 max-w-sm mx-auto">
             {searchQuery
               ? 'Try searching with a different name or keyword.'
               : 'Keep notes for friend dues (khata/udhar), future payments, and reminders. Settle them directly into your personal accounts with 1 click.'}
@@ -350,7 +351,7 @@ export function FinancialNotesSection() {
                 setNoteToEdit(null);
                 setIsAddModalOpen(true);
               }}
-              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-brand-primary hover:bg-brand-primary/90 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
+              className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
             >
               <Plus className="w-4 h-4" />
               <span>Create First Note</span>
@@ -382,12 +383,12 @@ export function FinancialNotesSection() {
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-2">
                     <span
-                      className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                      className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 ${
                         note.type === 'THEY_OWE_ME'
-                          ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                          ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-300'
                           : note.type === 'I_OWE_THEM'
-                          ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
-                          : 'bg-indigo-500/20 text-indigo-700 dark:text-indigo-300'
+                          ? 'bg-rose-500/20 text-rose-800 dark:text-rose-300'
+                          : 'bg-indigo-500/20 text-indigo-800 dark:text-indigo-300'
                       }`}
                     >
                       {note.type === 'THEY_OWE_ME' ? (
@@ -416,7 +417,7 @@ export function FinancialNotesSection() {
                       className={`p-1 rounded-lg transition-colors ${
                         note.is_pinned
                           ? 'text-amber-500 bg-amber-500/20'
-                          : 'text-text-muted hover:text-text-primary hover:bg-surface-muted/60'
+                          : 'text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200/50 dark:hover:bg-zinc-800'
                       }`}
                     >
                       <Pin className={`w-3.5 h-3.5 ${note.is_pinned ? 'fill-current' : ''}`} />
@@ -425,8 +426,8 @@ export function FinancialNotesSection() {
 
                   {/* Title */}
                   <h4
-                    className={`text-base font-bold text-text-primary ${
-                      note.is_resolved ? 'line-through text-text-muted' : ''
+                    className={`text-base font-bold text-zinc-900 dark:text-white ${
+                      note.is_resolved ? 'line-through text-zinc-400 dark:text-zinc-500' : ''
                     }`}
                   >
                     {note.title}
@@ -437,12 +438,12 @@ export function FinancialNotesSection() {
                     <div
                       className={`text-xl font-extrabold font-mono mt-1 ${
                         note.is_resolved
-                          ? 'line-through text-text-muted'
+                          ? 'line-through text-zinc-400 dark:text-zinc-500'
                           : note.type === 'THEY_OWE_ME'
-                          ? 'text-emerald-600 dark:text-emerald-400'
+                          ? 'text-emerald-700 dark:text-emerald-400'
                           : note.type === 'I_OWE_THEM'
-                          ? 'text-rose-600 dark:text-rose-400'
-                          : 'text-text-primary'
+                          ? 'text-rose-700 dark:text-rose-400'
+                          : 'text-zinc-900 dark:text-white'
                       }`}
                     >
                       {formatINR(note.amount)}
@@ -452,8 +453,8 @@ export function FinancialNotesSection() {
                   {/* Description */}
                   {note.description && (
                     <p
-                      className={`text-xs text-text-muted mt-2 whitespace-pre-line leading-relaxed ${
-                        note.is_resolved ? 'line-through' : ''
+                      className={`text-xs text-zinc-600 dark:text-zinc-400 mt-2 whitespace-pre-line leading-relaxed ${
+                        note.is_resolved ? 'line-through text-zinc-400 dark:text-zinc-500' : ''
                       }`}
                     >
                       {note.description}
@@ -462,17 +463,17 @@ export function FinancialNotesSection() {
                 </div>
 
                 {/* Card Bottom: Due date pill, Status, Actions */}
-                <div className="pt-4 mt-3 border-t border-surface-border/60 flex flex-col gap-2.5">
+                <div className="pt-4 mt-3 border-t border-zinc-200/60 dark:border-zinc-800/60 flex flex-col gap-2.5">
                   <div className="flex items-center justify-between text-[11px] gap-2 flex-wrap">
                     {/* Due Date Indicator */}
                     {note.due_date && (
                       <span
                         className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-medium ${
                           isOverdue
-                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-400 font-semibold'
+                            ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400 font-bold'
                             : isDueToday
-                            ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold'
-                            : 'bg-surface-card/60 text-text-muted'
+                            ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 font-bold'
+                            : 'bg-white/80 dark:bg-zinc-900/80 text-zinc-700 dark:text-zinc-300 border border-zinc-200/60 dark:border-zinc-800/60'
                         }`}
                       >
                         {isOverdue ? (
@@ -492,7 +493,7 @@ export function FinancialNotesSection() {
 
                     {/* Resolved status timestamp */}
                     {note.is_resolved && (
-                      <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
                         <CheckCircle2 className="w-3 h-3" />
                         <span>Settled</span>
                       </span>
@@ -505,7 +506,7 @@ export function FinancialNotesSection() {
                       <button
                         type="button"
                         onClick={(e) => handleReopen(note.id, e)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-text-primary bg-surface-card hover:bg-surface-muted rounded-lg border border-surface-border shadow-xs transition-colors"
+                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-zinc-900 dark:text-white bg-white dark:bg-zinc-900 hover:bg-zinc-100 dark:hover:bg-zinc-800 rounded-lg border border-zinc-200 dark:border-zinc-800 shadow-xs transition-colors"
                       >
                         <RotateCcw className="w-3 h-3" />
                         <span>Reopen</span>
@@ -517,7 +518,7 @@ export function FinancialNotesSection() {
                         className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors"
                       >
                         <CheckCircle2 className="w-3 h-3" />
-                        <span>Settle & Resolve</span>
+                        <span>Settle &amp; Resolve</span>
                       </button>
                     )}
 
@@ -528,7 +529,7 @@ export function FinancialNotesSection() {
                           setNoteToEdit(note);
                           setIsAddModalOpen(true);
                         }}
-                        className="p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-card rounded-lg transition-colors"
+                        className="p-1.5 text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-white/60 dark:hover:bg-zinc-900/60 rounded-lg transition-colors"
                         title="Edit note"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
@@ -536,7 +537,7 @@ export function FinancialNotesSection() {
                       <button
                         type="button"
                         onClick={(e) => handleDelete(note.id, note.title, e)}
-                        className="p-1.5 text-text-muted hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-colors"
+                        className="p-1.5 text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors"
                         title="Delete note"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
