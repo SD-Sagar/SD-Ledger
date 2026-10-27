@@ -13,12 +13,12 @@ import {
   ArrowRight,
   CheckCircle2,
   Lock,
-  Wallet,
   CloudDownload,
   RefreshCw,
 } from 'lucide-react';
 
 import { getSupabase } from '../lib/supabase/client';
+import { BrandLogo } from './BrandLogo';
 
 interface SetupWizardProps {
   onOpenAuth?: (prompt?: string) => void;
@@ -252,14 +252,7 @@ export function SetupWizard({ onOpenAuth }: SetupWizardProps) {
 
         {/* Wizard Header */}
         <div className="relative text-center mb-8">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 shadow-xl shadow-emerald-600/20">
-            <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-white dark:bg-zinc-950">
-              <Sparkles className="h-7 w-7 text-emerald-500 dark:text-emerald-400" />
-            </div>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white">
-            Welcome to SD-Ledger
-          </h1>
+          <BrandLogo size="lg" showBadge={false} className="justify-center mb-3" />
           <p className="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400 max-w-md mx-auto">
             Let&apos;s set up your ledger. SD-Ledger isolates your personal bank accounts with rock-solid atomicity.
           </p>

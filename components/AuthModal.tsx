@@ -22,6 +22,7 @@ import {
   ArrowRight,
   ShieldCheck,
 } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -157,18 +158,21 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
         {/* Header with Close */}
         <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
-          <div>
-            <h2 className="text-lg font-semibold text-white">
-              {activeTab === 'signin' && 'Sign In to SD-Ledger'}
-              {activeTab === 'signup' && 'Create Your Account'}
-              {activeTab === 'forgot' && 'Reset Password'}
-              {activeTab === 'settings' && 'Supabase Configuration'}
-            </h2>
-            <p className="text-xs text-zinc-400">
-              {activeTab === 'settings'
-                ? 'Connect your personal Supabase project'
-                : 'Isolated data with Row Level Security'}
-            </p>
+          <div className="flex items-center gap-3">
+            <BrandLogo size="sm" showText={false} interactive={false} />
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                {activeTab === 'signin' && 'Sign In to SD-Ledger'}
+                {activeTab === 'signup' && 'Create Your Account'}
+                {activeTab === 'forgot' && 'Reset Password'}
+                {activeTab === 'settings' && 'Supabase Configuration'}
+              </h2>
+              <p className="text-xs text-zinc-400">
+                {activeTab === 'settings'
+                  ? 'Connect your personal Supabase project'
+                  : 'Isolated data with Row Level Security'}
+              </p>
+            </div>
           </div>
           <button
             onClick={onClose}

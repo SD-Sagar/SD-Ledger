@@ -5,7 +5,6 @@ import { useAuth } from '../context/AuthContext';
 import { useLedger } from '../context/LedgerContext';
 import { useTheme } from '../context/ThemeContext';
 import {
-  Wallet,
   CloudUpload,
   CloudDownload,
   Wifi,
@@ -21,6 +20,7 @@ import {
   MoreVertical,
 } from 'lucide-react';
 import { DEMO_USER_ID } from '../lib/constants';
+import { BrandLogo } from './BrandLogo';
 
 interface NavbarProps {
   onOpenAuth: (prompt?: string) => void;
@@ -115,26 +115,12 @@ export function Navbar({
     <>
       <header className="sticky top-0 z-40 w-full border-b border-zinc-200 dark:border-zinc-800/80 bg-white/90 dark:bg-zinc-950/90 backdrop-blur-md transition-colors duration-200">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-3 sm:px-6 lg:px-8 gap-2">
-          {/* Brand */}
-          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0 min-w-0">
-            <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-tr from-emerald-600 via-teal-500 to-cyan-400 p-0.5 shadow-md shadow-emerald-500/20">
-              <div className="flex h-full w-full items-center justify-center rounded-[10px] bg-white dark:bg-zinc-950 transition-colors">
-                <Wallet className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-500 dark:text-emerald-400" />
-              </div>
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="text-lg sm:text-xl font-bold tracking-tight text-zinc-900 dark:text-white truncate">
-                  SD<span className="text-emerald-500 dark:text-emerald-400">-Ledger</span>
-                </span>
-                <span className="hidden md:inline-block rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 ring-1 ring-inset ring-emerald-500/20 shrink-0">
-                  Personal Bank Ledger
-                </span>
-              </div>
-              <p className="text-[10px] sm:text-[11px] text-zinc-500 dark:text-zinc-400 hidden lg:block truncate">
-                Offline-First • Smart Merge • Supabase Cloud Sync • Dark/Light
-              </p>
-            </div>
+          {/* Brand Logo with Creative Dynamic Dark/White Theme Reaction */}
+          <div className="shrink-0 min-w-0">
+            <BrandLogo
+              size="md"
+              subtext="Offline-First • Smart Merge • Supabase Cloud Sync"
+            />
           </div>
 
           {/* Navigation Action Tools & Controls */}

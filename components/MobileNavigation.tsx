@@ -2,7 +2,6 @@
 
 import React from 'react';
 import {
-  Wallet,
   MinusCircle,
   PlusCircle,
   ArrowRightLeft,

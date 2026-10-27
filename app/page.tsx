@@ -14,7 +14,8 @@ import { AuditTrailModal } from '../components/AuditTrailModal';
 import { AddTransactionModal } from '../components/AddTransactionModal';
 import { TransferModal } from '../components/TransferModal';
 import { MobileNavigation } from '../components/MobileNavigation';
-import { Wallet, Sparkles, RefreshCw, ArrowRight } from 'lucide-react';
+import { Sparkles, RefreshCw, ArrowRight } from 'lucide-react';
+import { BrandLogo } from '../components/BrandLogo';
 
 function MainAppContent() {
   const { isLoading: authLoading, user, continueAsDemo } = useAuth();
@@ -46,11 +47,7 @@ function MainAppContent() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background text-foreground p-4 transition-colors">
         <div className="flex flex-col items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 shadow-2xl shadow-emerald-500/20 animate-pulse">
-            <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-white dark:bg-zinc-950">
-              <Wallet className="h-8 w-8 text-emerald-500 dark:text-emerald-400" />
-            </div>
-          </div>
+          <BrandLogo size="lg" showText={false} className="animate-pulse" interactive={false} />
           <div className="text-center">
             <h2 className="text-lg font-bold text-zinc-900 dark:text-white tracking-tight">
               SD<span className="text-emerald-500 dark:text-emerald-400">-Ledger</span>
@@ -84,10 +81,8 @@ function MainAppContent() {
               <div className="pointer-events-none absolute -bottom-24 -right-24 h-64 w-64 rounded-full bg-indigo-600/15 blur-3xl" />
 
               <div className="relative">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 shadow-xl shadow-emerald-600/20">
-                  <div className="flex h-full w-full items-center justify-center rounded-[14px] bg-white dark:bg-zinc-950">
-                    <Wallet className="h-7 w-7 text-emerald-500 dark:text-emerald-400" />
-                  </div>
+                <div className="flex justify-center mb-4">
+                  <BrandLogo size="lg" showText={false} interactive={false} />
                 </div>
 
                 <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-white">
