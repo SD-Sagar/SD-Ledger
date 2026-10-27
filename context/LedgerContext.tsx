@@ -7,6 +7,9 @@ import {
   Transaction,
   Reconciliation,
   AuditLog,
+  FinancialNote,
+  NoteType,
+  NoteColor,
   SyncStatus,
   LedgerSummary,
   SyncQueueItem,
@@ -25,6 +28,10 @@ import {
   idbSaveReconciliation,
   idbGetAuditLogs,
   idbSaveAuditLog,
+  idbGetNotes,
+  idbSaveNote,
+  idbSaveNotes,
+  idbDeleteNote,
   idbAddToSyncQueue,
   idbGetSyncQueue,
   idbGetMeta,
@@ -51,6 +58,7 @@ interface LedgerContextType {
   transactions: Transaction[];
   reconciliations: Reconciliation[];
   auditLogs: AuditLog[];
+  notes: FinancialNote[];
   syncStatus: SyncStatus;
   summary: LedgerSummary;
   isInitialized: boolean;
@@ -135,6 +143,38 @@ interface LedgerContextType {
     notes?: string
   ) => Promise<{ success: boolean; error?: string }>;
 
+  // Financial Notes / Dues Actions
+  addNote: (data: {
+    title: string;
+    description?: string;
+    type: NoteType;
+    amount?: number;
+    due_date?: string;
+    card_color?: NoteColor;
+    is_pinned?: boolean;
+  }) => Promise<{ success: boolean; note?: FinancialNote; error?: string }>;
+
+  updateNote: (
+    note: FinancialNote
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  deleteNote: (
+    noteId: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
+  resolveNote: (
+    noteId: string,
+    options?: {
+      convertToTransaction?: boolean;
+      accountId?: string;
+      transactionDate?: string;
+    }
+  ) => Promise<{ success: boolean; transactionId?: string; error?: string }>;
+
+  reopenNote: (
+    noteId: string
+  ) => Promise<{ success: boolean; error?: string }>;
+
   triggerSync: () => Promise<SyncResult>;
   exportCSV: () => void;
   exportJSON: () => Promise<void>;
@@ -151,6 +191,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [reconciliations, setReconciliations] = useState<Reconciliation[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [notes, setNotes] = useState<FinancialNote[]>([]);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [linkedCloudAccount, setLinkedCloudAccountState] = useState<string | null>(null);
@@ -208,12 +249,14 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       // If pure online mode (authenticated Supabase user) and device is online:
       if (uid !== DEMO_USER_ID && supabase && navigator.onLine) {
         try {
-          const [accRes, txRes, recRes, logRes, localTxs] = await Promise.all([
+          const [accRes, txRes, recRes, logRes, notesRes, localTxs, localNotes] = await Promise.all([
             supabase.from('accounts').select('*').eq('user_id', uid).order('account_index', { ascending: true }),
             supabase.from('transactions').select('*').eq('user_id', uid).order('transaction_date', { ascending: false }),
             supabase.from('reconciliations').select('*').eq('user_id', uid).order('reconciled_date', { ascending: false }),
             supabase.from('audit_logs').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+            supabase.from('financial_notes').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
             idbGetTransactions(uid),
+            idbGetNotes(uid),
           ]);
 
           const remoteTxMap = new Map<string, Transaction>();
@@ -237,6 +280,23 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
+          // RECOVERY & MIRROR FOR FINANCIAL NOTES
+          const remoteNoteMap = new Map<string, FinancialNote>();
+          if (notesRes.data) {
+            (notesRes.data as FinancialNote[]).forEach((rn) => remoteNoteMap.set(rn.id, rn));
+          }
+          for (const ln of localNotes) {
+            if (!remoteNoteMap.has(ln.id)) {
+              const { error: pushNoteErr } = await supabase.from('financial_notes').upsert({
+                ...ln,
+                user_id: uid,
+              }, { onConflict: 'id' });
+              if (!pushNoteErr) {
+                remoteNoteMap.set(ln.id, ln);
+              }
+            }
+          }
+
           if (accRes.data) {
             await idbSaveAccounts(accRes.data as Account[]);
           }
@@ -248,6 +308,9 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
           }
           if (logRes.data) {
             for (const l of logRes.data) await idbSaveAuditLog(l as AuditLog);
+          }
+          if (notesRes.data || localNotes.length > 0) {
+            await idbSaveNotes(Array.from(remoteNoteMap.values()));
           }
         } catch (fetchErr) {
           console.warn('Could not fetch cloud data, falling back to local cache:', fetchErr);
@@ -273,12 +336,14 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
         if (linkedUid) {
           try {
-            const [accRes, txRes, recRes, logRes, localTxs, localQueue] = await Promise.all([
+            const [accRes, txRes, recRes, logRes, notesRes, localTxs, localNotes, localQueue] = await Promise.all([
               supabase.from('accounts').select('*').eq('user_id', linkedUid).order('account_index', { ascending: true }),
               supabase.from('transactions').select('*').eq('user_id', linkedUid).order('transaction_date', { ascending: false }),
               supabase.from('reconciliations').select('*').eq('user_id', linkedUid).order('reconciled_date', { ascending: false }),
               supabase.from('audit_logs').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }),
+              supabase.from('financial_notes').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }),
               idbGetTransactions(DEMO_USER_ID),
+              idbGetNotes(DEMO_USER_ID),
               idbGetSyncQueue(),
             ]);
 
@@ -339,17 +404,45 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
                 await idbSaveAuditLog({ ...(l as AuditLog), user_id: DEMO_USER_ID });
               }
             }
+
+            if (notesRes.data) {
+              const remoteNoteIds = new Set(notesRes.data.map((n: FinancialNote) => n.id));
+              for (const ln of localNotes) {
+                if (
+                  !remoteNoteIds.has(ln.id) &&
+                  !localQueue.some((q) => q.payload?.id === ln.id)
+                ) {
+                  await idbDeleteNote(ln.id, DEMO_USER_ID);
+                }
+              }
+
+              const remoteNotes: FinancialNote[] = notesRes.data.map((n: FinancialNote) => ({
+                ...n,
+                user_id: DEMO_USER_ID,
+              }));
+
+              const pendingLocalNotes = localNotes.filter((ln) =>
+                localQueue.some((q) => q.payload?.id === ln.id)
+              );
+
+              const mergedNotes = new Map<string, FinancialNote>();
+              remoteNotes.forEach((rn) => mergedNotes.set(rn.id, rn));
+              pendingLocalNotes.forEach((pn) => mergedNotes.set(pn.id, pn));
+
+              await idbSaveNotes(Array.from(mergedNotes.values()));
+            }
           } catch (offlinePullErr) {
             console.warn('Could not auto-pull latest cloud data for offline mode, using cached IndexedDB:', offlinePullErr);
           }
         }
       }
 
-      const [accs, txs, recs, logs, lastSync, queue] = await Promise.all([
+      const [accs, txs, recs, logs, userNotes, lastSync, queue] = await Promise.all([
         idbGetAccounts(uid),
         idbGetTransactions(uid),
         idbGetReconciliations(uid),
         idbGetAuditLogs(uid),
+        idbGetNotes(uid),
         idbGetMeta<string>('last_synced_at'),
         idbGetSyncQueue(),
       ]);
@@ -358,6 +451,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       setTransactions(txs);
       setReconciliations(recs);
       setAuditLogs(logs);
+      setNotes(userNotes);
       setSyncStatus((prev) => ({
         ...prev,
         lastSyncedAt: lastSync || null,
@@ -524,9 +618,24 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }, { onConflict: 'id' });
       }
 
+      // 6. Financial Notes
+      const userNotes = await idbGetNotes(effectiveUid);
+      const demoNotes = await idbGetNotes(DEMO_USER_ID);
+      const allNotes = [...userNotes, ...demoNotes];
+      const noteMap = new Map<string, FinancialNote>();
+      allNotes.forEach((n) => {
+        if (!noteMap.has(n.id)) noteMap.set(n.id, n);
+      });
+      for (const noteItem of Array.from(noteMap.values())) {
+        await supabase.from('financial_notes').upsert({
+          ...noteItem,
+          user_id: effectiveUid,
+        }, { onConflict: 'id' });
+      }
+
       await refreshData(effectiveUid);
       setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
-      const msg = `Successfully uploaded ${pushed} transactions to Supabase Cloud!`;
+      const msg = `Successfully uploaded ${pushed} transactions and notes to Supabase Cloud!`;
       setSyncMessage(msg);
       setTimeout(() => setSyncMessage(null), 5000);
       return { success: true, count: pushed };
@@ -572,10 +681,14 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     });
 
     if (res.success) {
-      // Mirror authoritative cloud accounts into DEMO_USER_ID
+      // Mirror authoritative cloud accounts and notes into DEMO_USER_ID
       const cloudAccounts = await idbGetAccounts(targetUid);
       for (const a of cloudAccounts) {
         await idbSaveAccount({ ...a, user_id: DEMO_USER_ID });
+      }
+      const cloudNotes = await idbGetNotes(targetUid);
+      for (const n of cloudNotes) {
+        await idbSaveNote({ ...n, user_id: DEMO_USER_ID });
       }
       if (typeof window !== 'undefined') {
         localStorage.setItem('sd_ledger_offline_changes_made', 'false');
@@ -601,6 +714,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       setTransactions([]);
       setReconciliations([]);
       setAuditLogs([]);
+      setNotes([]);
       setIsInitialized(true);
       setHasOfflineDataToMigrate(false);
       return;
@@ -997,6 +1111,25 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       });
     }
 
+    // Migrate offline notes to cloud account
+    const demoNotes = await idbGetNotes(DEMO_USER_ID);
+    for (const dNote of demoNotes) {
+      const newNote: FinancialNote = {
+        ...dNote,
+        user_id: targetUserId,
+        updated_at: nowIso,
+      };
+      await idbSaveNote(newNote);
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'financial_notes',
+        action: 'UPSERT',
+        payload: newNote as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+    }
+
     // Keep persistent offline accounts in sync with authoritative cloud accounts (DO NOT wipe DEMO_USER_ID!)
     for (const acc of accountsToSave) {
       await idbSaveAccount({ ...acc, user_id: DEMO_USER_ID });
@@ -1036,10 +1169,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         return { success: false, count: 0, error: 'Please sign in with your Supabase account to import cloud bank accounts.' };
       }
 
-      const [accRes, txRes, recRes] = await Promise.all([
+      const [accRes, txRes, recRes, notesRes] = await Promise.all([
         supabase.from('accounts').select('*').eq('user_id', targetUid).order('account_index', { ascending: true }),
         supabase.from('transactions').select('*').eq('user_id', targetUid).order('transaction_date', { ascending: false }),
         supabase.from('reconciliations').select('*').eq('user_id', targetUid).order('reconciled_date', { ascending: false }),
+        supabase.from('financial_notes').select('*').eq('user_id', targetUid).order('created_at', { ascending: false }),
       ]);
 
       if (accRes.error) throw accRes.error;
@@ -1076,6 +1210,14 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       await idbSaveTransactions(offlineTxs);
       for (const r of offlineRecs) {
         await idbSaveReconciliation(r);
+      }
+
+      if (notesRes.data) {
+        const offlineNotes: FinancialNote[] = notesRes.data.map((n: FinancialNote) => ({
+          ...n,
+          user_id: DEMO_USER_ID,
+        }));
+        await idbSaveNotes(offlineNotes);
       }
 
       // Record linked cloud credentials
@@ -1558,6 +1700,324 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Add Financial Note / Friend Due
+  const addNote = async (data: {
+    title: string;
+    description?: string;
+    type: NoteType;
+    amount?: number;
+    due_date?: string;
+    card_color?: NoteColor;
+    is_pinned?: boolean;
+  }): Promise<{ success: boolean; note?: FinancialNote; error?: string }> => {
+    if (!userId) return { success: false, error: 'User is not logged in.' };
+    if (!data.title?.trim()) return { success: false, error: 'Title or friend name is required.' };
+
+    const nowIso = new Date().toISOString();
+    const noteId = generateUUID();
+
+    const note: FinancialNote = {
+      id: noteId,
+      user_id: userId,
+      title: data.title.trim(),
+      description: data.description?.trim() || '',
+      type: data.type,
+      amount: data.amount ? Math.round(Number(data.amount) * 100) / 100 : null,
+      due_date: data.due_date || null,
+      card_color: data.card_color || 'yellow',
+      is_pinned: !!data.is_pinned,
+      is_resolved: false,
+      resolved_at: null,
+      resolved_transaction_id: null,
+      created_at: nowIso,
+      updated_at: nowIso,
+    };
+
+    await idbSaveNote(note);
+
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          const { error } = await supabase.from('financial_notes').insert(note);
+          if (error) {
+            console.error('Failed to insert note to Supabase:', error.message);
+          }
+        } catch (cloudErr) {
+          console.warn('Could not insert note directly to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'financial_notes',
+        action: 'UPSERT',
+        payload: note as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
+
+    await recordAuditLog({
+      id: generateUUID(),
+      user_id: userId,
+      action: 'CREATE',
+      entity_type: 'NOTE',
+      entity_id: noteId,
+      summary: `Created note: "${note.title}" (${note.type}${note.amount ? ` ₹${note.amount}` : ''})`,
+      details: { note },
+      created_at: nowIso,
+    });
+
+    await refreshData(userId);
+    return { success: true, note };
+  };
+
+  // Update Financial Note
+  const updateNote = async (
+    updated: FinancialNote
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!userId) return { success: false, error: 'User is not logged in.' };
+
+    const nowIso = new Date().toISOString();
+    const note: FinancialNote = {
+      ...updated,
+      updated_at: nowIso,
+    };
+
+    await idbSaveNote(note);
+
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          const { error } = await supabase.from('financial_notes').upsert(note, { onConflict: 'id' });
+          if (error) {
+            console.error('Failed to update note in Supabase:', error.message);
+          }
+        } catch (cloudErr) {
+          console.warn('Could not update note in Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'financial_notes',
+        action: 'UPSERT',
+        payload: note as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
+
+    await recordAuditLog({
+      id: generateUUID(),
+      user_id: userId,
+      action: 'UPDATE',
+      entity_type: 'NOTE',
+      entity_id: note.id,
+      summary: `Updated note: "${note.title}"`,
+      details: { note },
+      created_at: nowIso,
+    });
+
+    await refreshData(userId);
+    return { success: true };
+  };
+
+  // Delete Financial Note
+  const deleteNote = async (
+    noteId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!userId) return { success: false, error: 'User is not logged in.' };
+    const target = notes.find((n) => n.id === noteId);
+
+    await idbDeleteNote(noteId, userId);
+
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('financial_notes').delete().eq('id', noteId);
+        } catch (cloudErr) {
+          console.warn('Could not delete note in Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'financial_notes',
+        action: 'DELETE',
+        payload: { id: noteId },
+        created_at: new Date().toISOString(),
+        retries: 0,
+      });
+      markOfflineChange();
+    }
+
+    await recordAuditLog({
+      id: generateUUID(),
+      user_id: userId,
+      action: 'DELETE',
+      entity_type: 'NOTE',
+      entity_id: noteId,
+      summary: `Deleted note: "${target?.title || noteId}"`,
+      details: { note: target },
+      created_at: new Date().toISOString(),
+    });
+
+    await refreshData(userId);
+    return { success: true };
+  };
+
+  // Resolve and Settle Note (Optional: Auto-record transaction in ledger)
+  const resolveNote = async (
+    noteId: string,
+    options?: {
+      convertToTransaction?: boolean;
+      accountId?: string;
+      transactionDate?: string;
+    }
+  ): Promise<{ success: boolean; transactionId?: string; error?: string }> => {
+    if (!userId) return { success: false, error: 'User is not logged in.' };
+    const target = notes.find((n) => n.id === noteId);
+    if (!target) return { success: false, error: 'Note not found.' };
+
+    const nowIso = new Date().toISOString();
+    let createdTxId: string | null = null;
+
+    if (options?.convertToTransaction && options?.accountId && target.amount && target.amount > 0) {
+      const txDate = options.transactionDate || getTodayKolkata();
+      if (target.type === 'THEY_OWE_ME') {
+        // Friend paid us back -> Income into chosen account
+        const res = await addIncome({
+          amount: target.amount,
+          toAccountId: options.accountId,
+          category: 'Debt Repayment / Khata',
+          date: txDate,
+          description: `Settled note: ${target.title}${target.description ? ` - ${target.description}` : ''}`,
+        });
+        if (!res.success) {
+          return { success: false, error: res.error || 'Failed to record income.' };
+        }
+      } else if (target.type === 'I_OWE_THEM') {
+        // We paid back friend -> Expense from chosen account
+        const res = await addExpense({
+          amount: target.amount,
+          fromAccountId: options.accountId,
+          category: 'Debt Repayment / Khata',
+          date: txDate,
+          description: `Settled note: ${target.title}${target.description ? ` - ${target.description}` : ''}`,
+        });
+        if (!res.success) {
+          return { success: false, error: res.error || 'Failed to record expense.' };
+        }
+      }
+    }
+
+    const updatedNote: FinancialNote = {
+      ...target,
+      is_resolved: true,
+      resolved_at: nowIso,
+      resolved_transaction_id: createdTxId,
+      updated_at: nowIso,
+    };
+
+    await idbSaveNote(updatedNote);
+
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('financial_notes').upsert(updatedNote, { onConflict: 'id' });
+        } catch (cloudErr) {
+          console.warn('Could not sync resolved note to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'financial_notes',
+        action: 'UPSERT',
+        payload: updatedNote as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
+
+    await recordAuditLog({
+      id: generateUUID(),
+      user_id: userId,
+      action: 'UPDATE',
+      entity_type: 'NOTE',
+      entity_id: noteId,
+      summary: `Resolved note: "${target.title}"${options?.convertToTransaction ? ' (Recorded in personal account)' : ''}`,
+      details: { note: updatedNote, options },
+      created_at: nowIso,
+    });
+
+    await refreshData(userId);
+    return { success: true };
+  };
+
+  // Reopen Note
+  const reopenNote = async (
+    noteId: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    if (!userId) return { success: false, error: 'User is not logged in.' };
+    const target = notes.find((n) => n.id === noteId);
+    if (!target) return { success: false, error: 'Note not found.' };
+
+    const nowIso = new Date().toISOString();
+    const updatedNote: FinancialNote = {
+      ...target,
+      is_resolved: false,
+      resolved_at: null,
+      resolved_transaction_id: null,
+      updated_at: nowIso,
+    };
+
+    await idbSaveNote(updatedNote);
+
+    if (userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('financial_notes').upsert(updatedNote, { onConflict: 'id' });
+        } catch (cloudErr) {
+          console.warn('Could not sync reopened note to Supabase:', cloudErr);
+        }
+      }
+    } else {
+      await idbAddToSyncQueue({
+        id: generateUUID(),
+        table: 'financial_notes',
+        action: 'UPSERT',
+        payload: updatedNote as unknown as Record<string, unknown>,
+        created_at: nowIso,
+        retries: 0,
+      });
+      markOfflineChange();
+    }
+
+    await recordAuditLog({
+      id: generateUUID(),
+      user_id: userId,
+      action: 'UPDATE',
+      entity_type: 'NOTE',
+      entity_id: noteId,
+      summary: `Reopened note: "${target.title}"`,
+      details: { note: updatedNote },
+      created_at: nowIso,
+    });
+
+    await refreshData(userId);
+    return { success: true };
+  };
+
   return (
     <LedgerContext.Provider
       value={{
@@ -1565,6 +2025,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         transactions,
         reconciliations,
         auditLogs,
+        notes,
         syncStatus,
         summary,
         isInitialized,
@@ -1591,6 +2052,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         updateTransaction,
         deleteTransaction,
         reconcileAccount,
+        addNote,
+        updateNote,
+        deleteNote,
+        resolveNote,
+        reopenNote,
         triggerSync,
         exportCSV,
         exportJSON,

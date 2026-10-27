@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS public.reconciliations (
 
 -- 5. AUDIT LOGS TABLE (Full transaction audit trail)
 CREATE TABLE IF NOT EXISTS public.audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id TEXT PRIMARY KEY,
     user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
     action TEXT NOT NULL,
     entity_type TEXT NOT NULL,
@@ -61,6 +61,24 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
     summary TEXT NOT NULL,
     details JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 6. FINANCIAL NOTES TABLE (Smart sticky notes, friend dues, reminders)
+CREATE TABLE IF NOT EXISTS public.financial_notes (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    description TEXT,
+    type TEXT NOT NULL DEFAULT 'REMINDER',
+    amount NUMERIC(12, 2),
+    due_date DATE,
+    card_color TEXT NOT NULL DEFAULT 'yellow',
+    is_pinned BOOLEAN NOT NULL DEFAULT false,
+    is_resolved BOOLEAN NOT NULL DEFAULT false,
+    resolved_at TIMESTAMPTZ,
+    resolved_transaction_id TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ------------------------------------------------------------------------------
@@ -72,6 +90,7 @@ CREATE INDEX IF NOT EXISTS idx_transactions_from_acc ON public.transactions(from
 CREATE INDEX IF NOT EXISTS idx_transactions_to_acc ON public.transactions(to_account_id);
 CREATE INDEX IF NOT EXISTS idx_reconciliations_user_acc ON public.reconciliations(user_id, account_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON public.audit_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_financial_notes_user ON public.financial_notes(user_id, created_at DESC);
 
 -- ------------------------------------------------------------------------------
 -- ENABLE ROW LEVEL SECURITY (RLS) ON ALL TABLES
@@ -81,6 +100,7 @@ ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.reconciliations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.financial_notes ENABLE ROW LEVEL SECURITY;
 
 -- ------------------------------------------------------------------------------
 -- RLS POLICIES FOR ACCOUNTS
@@ -168,6 +188,30 @@ CREATE POLICY "Users can insert their own audit logs"
     WITH CHECK (auth.uid() = user_id);
 
 -- ------------------------------------------------------------------------------
+-- RLS POLICIES FOR FINANCIAL NOTES
+-- ------------------------------------------------------------------------------
+DROP POLICY IF EXISTS "Users can view their own financial notes" ON public.financial_notes;
+CREATE POLICY "Users can view their own financial notes"
+    ON public.financial_notes FOR SELECT
+    USING (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can create their own financial notes" ON public.financial_notes;
+CREATE POLICY "Users can create their own financial notes"
+    ON public.financial_notes FOR INSERT
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can update their own financial notes" ON public.financial_notes;
+CREATE POLICY "Users can update their own financial notes"
+    ON public.financial_notes FOR UPDATE
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+DROP POLICY IF EXISTS "Users can delete their own financial notes" ON public.financial_notes;
+CREATE POLICY "Users can delete their own financial notes"
+    ON public.financial_notes FOR DELETE
+    USING (auth.uid() = user_id);
+
+-- ------------------------------------------------------------------------------
 -- AUTO-UPDATE UPDATED_AT TRIGGER
 -- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.handle_updated_at()
@@ -187,5 +231,11 @@ CREATE TRIGGER tr_accounts_updated_at
 DROP TRIGGER IF EXISTS tr_transactions_updated_at ON public.transactions;
 CREATE TRIGGER tr_transactions_updated_at
     BEFORE UPDATE ON public.transactions
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_updated_at();
+
+DROP TRIGGER IF EXISTS tr_financial_notes_updated_at ON public.financial_notes;
+CREATE TRIGGER tr_financial_notes_updated_at
+    BEFORE UPDATE ON public.financial_notes
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();

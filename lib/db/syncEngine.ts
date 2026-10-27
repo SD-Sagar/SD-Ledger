@@ -15,11 +15,15 @@ import {
   idbSaveReconciliation,
   idbGetAuditLogs,
   idbSaveAuditLog,
+  idbGetNotes,
+  idbSaveNote,
+  idbSaveNotes,
+  idbDeleteNote,
   idbSetMeta,
   idbGetMeta,
   idbGetDeletedAccountIds,
 } from './indexedDB';
-import { Account, Transaction, Reconciliation, AuditLog, SyncStatus, SyncQueueItem } from '../types';
+import { Account, Transaction, Reconciliation, AuditLog, FinancialNote, SyncStatus, SyncQueueItem } from '../types';
 import { DEMO_USER_ID } from '../constants';
 
 let isSyncInProgress = false;
@@ -419,6 +423,44 @@ export async function processSync(
       }
     } catch (auditSyncErr) {
       console.warn('Could not sync audit logs during cloud sync:', auditSyncErr);
+    }
+
+    // -------------------------------------------------------------------------
+    // STEP 6: SYNC FINANCIAL NOTES (STICKY NOTES & DUES)
+    // -------------------------------------------------------------------------
+    try {
+      const { data: remoteNotes, error: notesError } = await supabase
+        .from('financial_notes')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!notesError && Array.isArray(remoteNotes)) {
+        for (const n of remoteNotes) {
+          await idbSaveNote(n as FinancialNote);
+          await idbSaveNote({ ...(n as FinancialNote), user_id: DEMO_USER_ID });
+        }
+      }
+
+      // Push local notes to cloud if not yet on remote
+      const [userNotes, demoNotes] = await Promise.all([
+        idbGetNotes(userId),
+        idbGetNotes(DEMO_USER_ID),
+      ]);
+      const remoteNoteIds = new Set((remoteNotes || []).map((n: FinancialNote) => n.id));
+      const localNoteMap = new Map<string, FinancialNote>();
+      [...userNotes, ...demoNotes].forEach((n) => {
+        if (!localNoteMap.has(n.id)) localNoteMap.set(n.id, n);
+      });
+
+      for (const n of Array.from(localNoteMap.values())) {
+        if (!remoteNoteIds.has(n.id)) {
+          await supabase.from('financial_notes').upsert({ ...n, user_id: userId }, { onConflict: 'id' });
+          remoteNoteIds.add(n.id);
+        }
+      }
+    } catch (notesSyncErr) {
+      console.warn('Could not sync financial notes during cloud sync:', notesSyncErr);
     }
 
     // -------------------------------------------------------------------------

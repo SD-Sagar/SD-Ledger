@@ -46,16 +46,36 @@ export interface AuditLog {
   id: string;
   user_id: string;
   action: 'CREATE' | 'UPDATE' | 'DELETE' | 'RECONCILE' | 'SETUP' | 'RESTORE';
-  entity_type: 'TRANSACTION' | 'ACCOUNT' | 'RECONCILIATION' | 'SYSTEM';
+  entity_type: 'TRANSACTION' | 'ACCOUNT' | 'RECONCILIATION' | 'SYSTEM' | 'NOTE';
   entity_id: string;
   summary: string;
   details?: Record<string, unknown>;
   created_at: string;
 }
 
+export type NoteType = 'THEY_OWE_ME' | 'I_OWE_THEM' | 'REMINDER';
+export type NoteColor = 'yellow' | 'mint' | 'rose' | 'sky' | 'lavender' | 'slate';
+
+export interface FinancialNote {
+  id: string; // UUID
+  user_id: string;
+  title: string;
+  description?: string;
+  type: NoteType;
+  amount?: number | null;
+  due_date?: string | null; // YYYY-MM-DD
+  card_color: NoteColor;
+  is_pinned: boolean;
+  is_resolved: boolean;
+  resolved_at?: string | null;
+  resolved_transaction_id?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SyncQueueItem {
   id: string;
-  table: 'accounts' | 'transactions' | 'reconciliations' | 'audit_logs';
+  table: 'accounts' | 'transactions' | 'reconciliations' | 'audit_logs' | 'financial_notes';
   action: 'UPSERT' | 'DELETE';
   payload: Record<string, unknown>;
   created_at: string;

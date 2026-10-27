@@ -1,7 +1,7 @@
-import { Account, Transaction, Reconciliation, AuditLog, SyncQueueItem } from '../types';
+import { Account, Transaction, Reconciliation, AuditLog, FinancialNote, SyncQueueItem } from '../types';
 
 const DB_NAME = 'SD_Ledger_DB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -43,6 +43,14 @@ export function getDB(): Promise<IDBDatabase> {
         const store = db.createObjectStore('audit_logs', { keyPath: 'id' });
         store.createIndex('user_id', 'user_id', { unique: false });
         store.createIndex('created_at', 'created_at', { unique: false });
+      }
+
+      // Financial Notes Store (Smart Sticky Notes & Dues)
+      if (!db.objectStoreNames.contains('financial_notes')) {
+        const store = db.createObjectStore('financial_notes', { keyPath: 'id' });
+        store.createIndex('user_id', 'user_id', { unique: false });
+        store.createIndex('created_at', 'created_at', { unique: false });
+        store.createIndex('is_pinned', 'is_pinned', { unique: false });
       }
 
       // Sync Queue Store
@@ -256,17 +264,19 @@ export async function idbRemapQueueAccountId(
 export async function idbClearUserData(userId: string): Promise<void> {
   if (!userId) return;
   const db = await getDB();
-  const stores = ['accounts', 'transactions', 'reconciliations', 'audit_logs'] as const;
+  const stores = ['accounts', 'transactions', 'reconciliations', 'audit_logs', 'financial_notes'] as const;
   return new Promise((resolve, reject) => {
     const tx = db.transaction(stores, 'readwrite');
     stores.forEach((storeName) => {
-      const store = tx.objectStore(storeName);
-      const index = store.index('user_id');
-      const req = index.getAllKeys(userId);
-      req.onsuccess = () => {
-        const keys = req.result;
-        keys.forEach((k) => store.delete(k));
-      };
+      if (db.objectStoreNames.contains(storeName)) {
+        const store = tx.objectStore(storeName);
+        const index = store.index('user_id');
+        const req = index.getAllKeys(userId);
+        req.onsuccess = () => {
+          const keys = req.result;
+          keys.forEach((k) => store.delete(k));
+        };
+      }
     });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
@@ -465,6 +475,61 @@ export async function idbSetMeta(key: string, value: unknown): Promise<void> {
   });
 }
 
+// ---------------------- FINANCIAL NOTES (STICKY NOTES & DUES) ----------------------
+export async function idbGetNotes(userId: string): Promise<FinancialNote[]> {
+  const db = await getDB();
+  if (!db.objectStoreNames.contains('financial_notes')) return [];
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('financial_notes', 'readonly');
+    const store = tx.objectStore('financial_notes');
+    const index = store.index('user_id');
+    const request = index.getAll(userId);
+
+    request.onsuccess = () => {
+      const list = (request.result as FinancialNote[]) || [];
+      list.sort((a, b) => {
+        if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+      resolve(list);
+    };
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function idbSaveNote(note: FinancialNote): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('financial_notes', 'readwrite');
+    const store = tx.objectStore('financial_notes');
+    const request = store.put(note);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
+export async function idbSaveNotes(notes: FinancialNote[]): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('financial_notes', 'readwrite');
+    const store = tx.objectStore('financial_notes');
+    notes.forEach((n) => store.put(n));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+export async function idbDeleteNote(id: string, userId: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('financial_notes', 'readwrite');
+    const store = tx.objectStore('financial_notes');
+    const request = store.delete(id);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // ---------------------- BACKUP & RESTORE ----------------------
 export interface FullDatabaseBackup {
   version: number;
@@ -475,18 +540,20 @@ export interface FullDatabaseBackup {
   transactions: Transaction[];
   reconciliations: Reconciliation[];
   auditLogs: AuditLog[];
+  notes?: FinancialNote[];
 }
 
 export async function idbExportDatabase(userId: string): Promise<FullDatabaseBackup> {
-  const [accounts, transactions, reconciliations, auditLogs] = await Promise.all([
+  const [accounts, transactions, reconciliations, auditLogs, notes] = await Promise.all([
     idbGetAccounts(userId),
     idbGetTransactions(userId),
     idbGetReconciliations(userId),
     idbGetAuditLogs(userId),
+    idbGetNotes(userId),
   ]);
 
   return {
-    version: 1,
+    version: 2,
     appName: 'SD-Ledger',
     exportedAt: new Date().toISOString(),
     userId,
@@ -494,6 +561,7 @@ export async function idbExportDatabase(userId: string): Promise<FullDatabaseBac
     transactions,
     reconciliations,
     auditLogs,
+    notes,
   };
 }
 
@@ -504,12 +572,17 @@ export async function idbRestoreDatabase(userId: string, backup: FullDatabaseBac
 
   const db = await getDB();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(['accounts', 'transactions', 'reconciliations', 'audit_logs'], 'readwrite');
+    const storeNames = ['accounts', 'transactions', 'reconciliations', 'audit_logs'] as string[];
+    if (db.objectStoreNames.contains('financial_notes')) {
+      storeNames.push('financial_notes');
+    }
+    const tx = db.transaction(storeNames, 'readwrite');
 
     const accStore = tx.objectStore('accounts');
     const txStore = tx.objectStore('transactions');
     const recStore = tx.objectStore('reconciliations');
     const auditStore = tx.objectStore('audit_logs');
+    const noteStore = db.objectStoreNames.contains('financial_notes') ? tx.objectStore('financial_notes') : null;
 
     // Assign current user_id to avoid permission mismatch
     backup.accounts.forEach((acc) => {
@@ -529,6 +602,12 @@ export async function idbRestoreDatabase(userId: string, backup: FullDatabaseBac
     if (Array.isArray(backup.auditLogs)) {
       backup.auditLogs.forEach((a) => {
         auditStore.put({ ...a, user_id: userId });
+      });
+    }
+
+    if (noteStore && Array.isArray(backup.notes)) {
+      backup.notes.forEach((n) => {
+        noteStore.put({ ...n, user_id: userId });
       });
     }
 
