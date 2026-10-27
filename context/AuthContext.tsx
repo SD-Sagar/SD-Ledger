@@ -165,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}` : undefined;
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: pass,
@@ -172,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           data: {
             full_name: fullName?.trim() || '',
           },
+          emailRedirectTo: redirectUrl,
         },
       });
 

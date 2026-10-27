@@ -411,62 +411,71 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
             return (
               <div
                 key={tx.id}
-                className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-zinc-200 dark:border-zinc-800/80 bg-white dark:bg-zinc-900/60 p-4 transition-all hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-900 shadow-sm"
+                className="group relative flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border border-zinc-200 dark:border-zinc-800/90 bg-white dark:bg-zinc-950 p-4 transition-all hover:border-zinc-300 dark:hover:border-zinc-700 hover:shadow-md"
               >
-                {/* Left: Icon, Details, and Accounts */}
-                <div className="flex items-start sm:items-center gap-3.5">
+                {/* Left: Type Icon & Details */}
+                <div className="flex items-start sm:items-center gap-3.5 min-w-0">
                   {/* Type Icon */}
                   <div
-                    className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl p-2 ${
+                    className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl p-2.5 transition-transform group-hover:scale-105 ${
                       tx.type === 'EXPENSE'
-                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/20'
+                        ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 ring-1 ring-rose-500/30'
                         : tx.type === 'INCOME'
-                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/20'
-                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 ring-1 ring-indigo-500/20'
+                        ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 ring-1 ring-emerald-500/30'
+                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 ring-1 ring-indigo-500/30'
                     }`}
                   >
-                    {tx.type === 'EXPENSE' && <ArrowUpRight className="h-5 w-5" />}
-                    {tx.type === 'INCOME' && <ArrowDownLeft className="h-5 w-5" />}
-                    {tx.type === 'TRANSFER' && <ArrowRightLeft className="h-5 w-5" />}
+                    {tx.type === 'EXPENSE' && <ArrowUpRight className="h-5 w-5 stroke-[2.5]" />}
+                    {tx.type === 'INCOME' && <ArrowDownLeft className="h-5 w-5 stroke-[2.5]" />}
+                    {tx.type === 'TRANSFER' && <ArrowRightLeft className="h-5 w-5 stroke-[2.5]" />}
                   </div>
 
-                  {/* Info */}
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-zinc-900 dark:text-white">
+                  {/* Info Column */}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-bold text-zinc-900 dark:text-white truncate">
                         {tx.type === 'TRANSFER' ? 'Account Transfer' : tx.category}
                       </span>
                       <span
-                        className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${
+                        className={`rounded-full px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wider border ${
                           tx.type === 'EXPENSE'
-                            ? 'bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400'
+                            ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900/60'
                             : tx.type === 'INCOME'
-                            ? 'bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
-                            : 'bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400'
+                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/60'
+                            : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900/60'
                         }`}
                       >
                         {tx.type}
                       </span>
                     </div>
 
-                    {/* Account relationship */}
-                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-                      <Building2 className="h-3 w-3 text-zinc-400 dark:text-zinc-500" />
-                      {tx.type === 'EXPENSE' && <span>Deducted from <strong className="text-zinc-800 dark:text-zinc-200">{fromName}</strong></span>}
-                      {tx.type === 'INCOME' && <span>Deposited into <strong className="text-zinc-800 dark:text-zinc-200">{toName}</strong></span>}
-                      {tx.type === 'TRANSFER' && (
+                    {/* Account Relationship Badges */}
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 mt-1 flex-wrap">
+                      <Building2 className="h-3 w-3 text-zinc-400 shrink-0" />
+                      {tx.type === 'EXPENSE' && (
                         <span>
-                          <strong className="text-zinc-800 dark:text-zinc-200">{fromName}</strong> &rarr;{' '}
-                          <strong className="text-zinc-800 dark:text-zinc-200">{toName}</strong>
+                          From <span className="font-semibold text-zinc-800 dark:text-zinc-200 rounded-md bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 text-[11px] border border-zinc-200/80 dark:border-zinc-800">{fromName}</span>
+                        </span>
+                      )}
+                      {tx.type === 'INCOME' && (
+                        <span>
+                          Into <span className="font-semibold text-zinc-800 dark:text-zinc-200 rounded-md bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 text-[11px] border border-zinc-200/80 dark:border-zinc-800">{toName}</span>
+                        </span>
+                      )}
+                      {tx.type === 'TRANSFER' && (
+                        <span className="flex items-center gap-1">
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 rounded-md bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 text-[11px] border border-zinc-200/80 dark:border-zinc-800">{fromName}</span>
+                          <span className="text-zinc-400">&rarr;</span>
+                          <span className="font-semibold text-zinc-800 dark:text-zinc-200 rounded-md bg-zinc-100 dark:bg-zinc-900 px-1.5 py-0.5 text-[11px] border border-zinc-200/80 dark:border-zinc-800">{toName}</span>
                         </span>
                       )}
                     </div>
 
-                    {/* Description & Date */}
-                    <div className="flex items-center gap-3 text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
+                    {/* Date and Description */}
+                    <div className="flex items-center gap-2.5 text-[11px] text-zinc-400 dark:text-zinc-500 mt-1">
                       <span>{formatDisplayDate(tx.transaction_date)} {tx.transaction_time || ''}</span>
                       {tx.description && (
-                        <span className="truncate max-w-[200px] sm:max-w-xs text-zinc-600 dark:text-zinc-400 italic">
+                        <span className="truncate max-w-[180px] sm:max-w-xs text-zinc-600 dark:text-zinc-300 italic">
                           &ldquo;{tx.description}&rdquo;
                         </span>
                       )}
@@ -475,29 +484,29 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
                 </div>
 
                 {/* Right: Amount & Actions */}
-                <div className="flex items-center justify-between sm:justify-end gap-4 border-t sm:border-t-0 pt-2 sm:pt-0 border-zinc-100 dark:border-zinc-800">
+                <div className="flex items-center justify-between sm:justify-end gap-3.5 border-t sm:border-t-0 pt-2.5 sm:pt-0 border-zinc-100 dark:border-zinc-900">
                   <div className="text-left sm:text-right">
                     <span
-                      className={`text-base font-bold font-mono ${
+                      className={`text-lg sm:text-xl font-extrabold font-mono tracking-tight ${
                         tx.type === 'EXPENSE'
                           ? 'text-rose-600 dark:text-rose-400'
                           : tx.type === 'INCOME'
                           ? 'text-emerald-600 dark:text-emerald-400'
-                          : 'text-indigo-600 dark:text-indigo-300'
+                          : 'text-indigo-600 dark:text-indigo-400'
                       }`}
                     >
                       {tx.type === 'EXPENSE' && '- '}
                       {tx.type === 'INCOME' && '+ '}
                       {formatINR(tx.amount)}
                     </span>
-                    <div className="flex items-center gap-1 justify-start sm:justify-end text-[10px] text-zinc-500">
+                    <div className="flex items-center gap-1 justify-start sm:justify-end text-[10px]">
                       {tx.sync_status === 'pending' ? (
-                        <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                        <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
                           <CloudOff className="h-3 w-3" /> Offline Cached
                         </span>
                       ) : (
-                        <span className="text-emerald-600 dark:text-emerald-500/80 flex items-center gap-1">
-                          <CloudCheck className="h-3 w-3" /> Synced
+                        <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1 font-medium">
+                          <CloudCheck className="h-3 w-3" /> Cloud Synced
                         </span>
                       )}
                     </div>
@@ -508,14 +517,14 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
                     <button
                       onClick={() => setInspectTx(tx)}
                       title="Inspect Entry"
-                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
+                      className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-zinc-900 dark:hover:text-white transition-colors"
                     >
                       <Eye className="h-4 w-4" />
                     </button>
                     <button
                       onClick={() => onEditTransaction(tx)}
                       title="Edit Entry"
-                      className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
                     >
                       <Edit2 className="h-4 w-4" />
                     </button>

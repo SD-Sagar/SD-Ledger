@@ -230,22 +230,22 @@ export function Navbar({
               )}
             </button>
 
-            {/* DESKTOP-ONLY QUICK UTILITIES */}
+            {/* DESKTOP-ONLY QUICK UTILITIES (VISIBLE ON XL SCREENS 1280PX+) */}
             {/* Audit Trail Button */}
             <button
               onClick={onOpenAuditTrail}
               title="Audit Trail Log"
-              className="hidden lg:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
+              className="hidden xl:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
             >
               <ShieldCheck className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
-              <span className="hidden xl:inline">Audit Trail</span>
+              <span>Audit Trail</span>
             </button>
 
             {/* Backup / Export Button */}
             <button
               onClick={onOpenBackup}
               title="CSV Export & JSON Backup / Restore"
-              className="hidden md:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
+              className="hidden xl:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
             >
               <Download className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
               <span>Backup</span>
@@ -267,15 +267,15 @@ export function Navbar({
                 type="button"
                 onClick={() => setShowSwitchModal(true)}
                 title="Switch Cloud Account"
-                className="hidden md:flex items-center gap-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
+                className="hidden xl:flex items-center gap-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
               >
                 <ArrowLeftRight className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
                 <span>Switch</span>
               </button>
             )}
 
-            {/* MOBILE & TABLET "MORE" DROPDOWN MENU */}
-            <div className="relative md:hidden" ref={menuRef}>
+            {/* LAPTOPS (<1280px), TABLETS & MOBILE "MORE" DROPDOWN MENU */}
+            <div className="relative xl:hidden" ref={menuRef}>
               <button
                 type="button"
                 onClick={() => setShowMoreMenu(!showMoreMenu)}

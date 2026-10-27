@@ -13,11 +13,13 @@ import {
   idbDeleteTransaction,
   idbGetReconciliations,
   idbSaveReconciliation,
+  idbGetAuditLogs,
+  idbSaveAuditLog,
   idbSetMeta,
   idbGetMeta,
   idbGetDeletedAccountIds,
 } from './indexedDB';
-import { Account, Transaction, Reconciliation, SyncStatus, SyncQueueItem } from '../types';
+import { Account, Transaction, Reconciliation, AuditLog, SyncStatus, SyncQueueItem } from '../types';
 import { DEMO_USER_ID } from '../constants';
 
 let isSyncInProgress = false;
@@ -379,6 +381,44 @@ export async function processSync(
       for (const r of remoteRecs) {
         await idbSaveReconciliation(r as Reconciliation);
       }
+    }
+
+    // -------------------------------------------------------------------------
+    // STEP 5: SYNC AUDIT LOGS ACROSS ALL DEVICES
+    // -------------------------------------------------------------------------
+    try {
+      const { data: remoteLogs, error: logError } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (!logError && Array.isArray(remoteLogs)) {
+        for (const l of remoteLogs) {
+          await idbSaveAuditLog(l as AuditLog);
+          await idbSaveAuditLog({ ...(l as AuditLog), user_id: DEMO_USER_ID });
+        }
+      }
+
+      // Push local audit logs to cloud if not yet on remote
+      const [userLogs, demoLogs] = await Promise.all([
+        idbGetAuditLogs(userId),
+        idbGetAuditLogs(DEMO_USER_ID),
+      ]);
+      const remoteLogIds = new Set((remoteLogs || []).map((l: AuditLog) => l.id));
+      const localLogMap = new Map<string, AuditLog>();
+      [...userLogs, ...demoLogs].forEach((l) => {
+        if (!localLogMap.has(l.id)) localLogMap.set(l.id, l);
+      });
+
+      for (const l of Array.from(localLogMap.values())) {
+        if (!remoteLogIds.has(l.id)) {
+          await supabase.from('audit_logs').upsert({ ...l, user_id: userId }, { onConflict: 'id' });
+          remoteLogIds.add(l.id);
+        }
+      }
+    } catch (auditSyncErr) {
+      console.warn('Could not sync audit logs during cloud sync:', auditSyncErr);
     }
 
     // -------------------------------------------------------------------------

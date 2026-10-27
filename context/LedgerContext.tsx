@@ -509,6 +509,21 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }, { onConflict: 'id' });
       }
 
+      // 5. Audit Logs
+      const userLogs = await idbGetAuditLogs(effectiveUid);
+      const demoLogs = await idbGetAuditLogs(DEMO_USER_ID);
+      const allLogs = [...userLogs, ...demoLogs];
+      const logMap = new Map<string, AuditLog>();
+      allLogs.forEach((l) => {
+        if (!logMap.has(l.id)) logMap.set(l.id, l);
+      });
+      for (const logItem of Array.from(logMap.values())) {
+        await supabase.from('audit_logs').upsert({
+          ...logItem,
+          user_id: effectiveUid,
+        }, { onConflict: 'id' });
+      }
+
       await refreshData(effectiveUid);
       setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
       const msg = `Successfully uploaded ${pushed} transactions to Supabase Cloud!`;
@@ -652,6 +667,20 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     }
   }, [userId]);
 
+  const recordAuditLog = useCallback(async (log: AuditLog) => {
+    await idbSaveAuditLog(log);
+    if (userId && userId !== DEMO_USER_ID) {
+      const supabase = getSupabase();
+      if (supabase && navigator.onLine) {
+        try {
+          await supabase.from('audit_logs').insert(log);
+        } catch (err) {
+          console.warn('Could not sync audit log to Supabase:', err);
+        }
+      }
+    }
+  }, [userId]);
+
   // Setup Exactly Two Accounts
   const setupTwoAccounts = async (
     acc1: { name: string; balance: number; color?: string },
@@ -734,7 +763,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       details: { account1, account2 },
       created_at: nowIso,
     };
-    await idbSaveAuditLog(audit);
+    await recordAuditLog(audit);
 
     await refreshData(userId);
     return true;
@@ -787,7 +816,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       markOfflineChange();
     }
 
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'CREATE',
@@ -835,7 +864,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       markOfflineChange();
     }
 
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'DELETE',
@@ -1136,7 +1165,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     // Audit log
     const acc = accounts.find((a) => a.id === data.fromAccountId);
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'CREATE',
@@ -1215,7 +1244,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     }
 
     const acc = accounts.find((a) => a.id === data.toAccountId);
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'CREATE',
@@ -1299,7 +1328,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     const fromAcc = accounts.find((a) => a.id === data.fromAccountId);
     const toAcc = accounts.find((a) => a.id === data.toAccountId);
 
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'CREATE',
@@ -1361,7 +1390,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       markOfflineChange();
     }
 
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'UPDATE',
@@ -1407,7 +1436,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       markOfflineChange();
     }
 
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'DELETE',
@@ -1472,7 +1501,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       markOfflineChange();
     }
 
-    await idbSaveAuditLog({
+    await recordAuditLog({
       id: generateUUID(),
       user_id: userId,
       action: 'RECONCILE',
@@ -1510,7 +1539,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const backup = JSON.parse(jsonStr);
       await idbRestoreDatabase(userId, backup);
 
-      await idbSaveAuditLog({
+      await recordAuditLog({
         id: generateUUID(),
         user_id: userId,
         action: 'RESTORE',
