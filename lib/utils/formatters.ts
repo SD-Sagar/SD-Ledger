@@ -39,6 +39,21 @@ export function getTodayKolkata(): string {
 }
 
 /**
+ * Returns date string YYYY-MM-DD for 6 months ago in Asia/Kolkata timezone
+ */
+export function getSixMonthsAgoKolkata(): string {
+  const today = getTodayKolkata();
+  const parts = today.split('-').map(Number);
+  // Subtract 6 months
+  const d = new Date(parts[0], parts[1] - 1 - 6, parts[2]);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+
+/**
  * Returns current time string HH:mm in Asia/Kolkata timezone
  */
 export function getCurrentTimeKolkata(): string {

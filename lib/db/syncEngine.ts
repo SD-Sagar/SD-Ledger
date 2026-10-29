@@ -22,9 +22,17 @@ import {
   idbSetMeta,
   idbGetMeta,
   idbGetDeletedAccountIds,
+  idbGetDeletedTransactionIds,
+  idbMarkTransactionDeleted,
 } from './indexedDB';
 import { Account, Transaction, Reconciliation, AuditLog, FinancialNote, SyncStatus, SyncQueueItem } from '../types';
-import { DEMO_USER_ID } from '../constants';
+import {
+  DEMO_USER_ID,
+  MAX_AUDIT_TRAIL_LIMIT,
+  RESOLVED_NOTES_RETENTION_DAYS,
+  TRANSACTION_HISTORY_MONTHS_LIMIT,
+} from '../constants';
+import { getSixMonthsAgoKolkata } from '../utils/formatters';
 
 let isSyncInProgress = false;
 
@@ -148,6 +156,27 @@ export async function processSync(
     // Ensure all deleted account IDs are immediately deleted from Supabase cloud
     for (const delId of deletedAccountIds) {
       await supabase.from('accounts').delete().eq('id', delId);
+    }
+
+    // -------------------------------------------------------------------------
+    // RESOLVE DELETED TRANSACTIONS
+    // Prevents deleted transactions from resurrecting from other devices or cloud!
+    // -------------------------------------------------------------------------
+    const deletedTransactionIds = new Set<string>([
+      ...(await idbGetDeletedTransactionIds(userId)),
+      ...(await idbGetDeletedTransactionIds(DEMO_USER_ID)),
+    ]);
+    initialQueue
+      .filter((q) => q.table === 'transactions' && (q.action === 'DELETE' || (q.payload as { is_deleted?: boolean })?.is_deleted))
+      .forEach((q) => {
+        const targetId = (q.payload as { id: string })?.id;
+        if (targetId) deletedTransactionIds.add(targetId);
+      });
+
+    // Ensure all deleted transaction IDs are tombstoned in Supabase
+    const tombstoneTimestamp = new Date().toISOString();
+    for (const delTxId of deletedTransactionIds) {
+      await supabase.from('transactions').update({ is_deleted: true, updated_at: tombstoneTimestamp }).eq('id', delTxId);
     }
 
     const { data: remoteAccountsData, error: accError } = await supabase
@@ -283,16 +312,31 @@ export async function processSync(
         } else if (item.action === 'DELETE') {
           const targetId = (item.payload as { id: string })?.id;
           if (targetId) {
-            const { error } = await supabase
-              .from(item.table)
-              .delete()
-              .eq('id', targetId);
+            if (item.table === 'transactions') {
+              // Soft delete tombstone so all devices cleanly receive the deletion!
+              const { error } = await supabase
+                .from('transactions')
+                .update({ is_deleted: true, updated_at: new Date().toISOString() })
+                .eq('id', targetId);
 
-            if (error) {
-              console.error(`Sync error on ${item.table} delete:`, error);
-              throw error;
+              if (error) {
+                console.error(`Sync error on transactions tombstone delete:`, error);
+                throw error;
+              }
+              deletedTransactionIds.add(targetId);
+              pushedCount++;
+            } else {
+              const { error } = await supabase
+                .from(item.table)
+                .delete()
+                .eq('id', targetId);
+
+              if (error) {
+                console.error(`Sync error on ${item.table} delete:`, error);
+                throw error;
+              }
+              pushedCount++;
             }
-            pushedCount++;
           }
         }
 
@@ -321,22 +365,24 @@ export async function processSync(
       });
 
       for (const remoteTx of remoteTransactions) {
+        if (remoteTx.is_deleted || deletedTransactionIds.has(remoteTx.id)) {
+          await idbDeleteTransaction(remoteTx.id, userId);
+          await idbDeleteTransaction(remoteTx.id, DEMO_USER_ID);
+          pulledCount++;
+          continue;
+        }
+
         const localTx = localTxMap.get(remoteTx.id);
         if (localTx) {
           const remoteTime = new Date(remoteTx.updated_at || remoteTx.created_at || 0).getTime();
           const localTime = new Date(localTx.updated_at || localTx.created_at || 0).getTime();
 
           if (remoteTime > localTime) {
-            if (remoteTx.is_deleted) {
-              await idbDeleteTransaction(remoteTx.id, userId);
-              await idbDeleteTransaction(remoteTx.id, DEMO_USER_ID);
-            } else {
-              await idbSaveTransaction(remoteTx);
-              await idbSaveTransaction({ ...remoteTx, user_id: DEMO_USER_ID });
-            }
+            await idbSaveTransaction(remoteTx);
+            await idbSaveTransaction({ ...remoteTx, user_id: DEMO_USER_ID });
             pulledCount++;
           } else if (localTime > remoteTime) {
-            if (!localTx.is_deleted) {
+            if (!localTx.is_deleted && !deletedTransactionIds.has(localTx.id)) {
               const cleanTx: Record<string, unknown> = { ...localTx, user_id: userId };
               delete cleanTx.sync_status;
               await supabase.from('transactions').upsert(cleanTx, { onConflict: 'id' });
@@ -345,20 +391,18 @@ export async function processSync(
           }
         } else {
           // New transaction from cloud / another device
-          if (!remoteTx.is_deleted) {
-            await idbSaveTransaction(remoteTx);
-            await idbSaveTransaction({ ...remoteTx, user_id: DEMO_USER_ID });
-            pulledCount++;
-          }
+          await idbSaveTransaction(remoteTx);
+          await idbSaveTransaction({ ...remoteTx, user_id: DEMO_USER_ID });
+          pulledCount++;
         }
       }
 
-      // Any local transaction not on remote: push up to Supabase
+      // Any local transaction not on remote: push up to Supabase (ONLY if active and never deleted)
       const remoteTxMap = new Map<string, Transaction>();
       remoteTransactions.forEach((r) => remoteTxMap.set(r.id, r));
 
       for (const localTx of Array.from(localTxMap.values())) {
-        if (!remoteTxMap.has(localTx.id) && !localTx.is_deleted) {
+        if (!remoteTxMap.has(localTx.id) && !localTx.is_deleted && !deletedTransactionIds.has(localTx.id)) {
           const cleanTx: Record<string, unknown> = { ...localTx, user_id: userId };
           delete cleanTx.sync_status;
           const { error: txErr } = await supabase.from('transactions').upsert(cleanTx, { onConflict: 'id' });
@@ -388,14 +432,15 @@ export async function processSync(
     }
 
     // -------------------------------------------------------------------------
-    // STEP 5: SYNC AUDIT LOGS ACROSS ALL DEVICES
+    // STEP 5: SYNC AUDIT LOGS ACROSS ALL DEVICES (Capped at MAX_AUDIT_TRAIL_LIMIT)
     // -------------------------------------------------------------------------
     try {
       const { data: remoteLogs, error: logError } = await supabase
         .from('audit_logs')
         .select('*')
         .eq('user_id', userId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(MAX_AUDIT_TRAIL_LIMIT);
 
       if (!logError && Array.isArray(remoteLogs)) {
         for (const l of remoteLogs) {
@@ -404,7 +449,7 @@ export async function processSync(
         }
       }
 
-      // Push local audit logs to cloud if not yet on remote
+      // Push local audit logs to cloud if not yet on remote (up to MAX_AUDIT_TRAIL_LIMIT)
       const [userLogs, demoLogs] = await Promise.all([
         idbGetAuditLogs(userId),
         idbGetAuditLogs(DEMO_USER_ID),
@@ -415,7 +460,12 @@ export async function processSync(
         if (!localLogMap.has(l.id)) localLogMap.set(l.id, l);
       });
 
-      for (const l of Array.from(localLogMap.values())) {
+      // Sort newest first and limit to max limit
+      const sortedLocalLogs = Array.from(localLogMap.values())
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))
+        .slice(0, MAX_AUDIT_TRAIL_LIMIT);
+
+      for (const l of sortedLocalLogs) {
         if (!remoteLogIds.has(l.id)) {
           await supabase.from('audit_logs').upsert({ ...l, user_id: userId }, { onConflict: 'id' });
           remoteLogIds.add(l.id);
@@ -427,8 +477,11 @@ export async function processSync(
 
     // -------------------------------------------------------------------------
     // STEP 6: SYNC FINANCIAL NOTES (STICKY NOTES & DUES)
+    // Automatic 5-day expiration for resolved notes (unresolved notes stay forever)
     // -------------------------------------------------------------------------
     try {
+      const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
       const { data: remoteNotes, error: notesError } = await supabase
         .from('financial_notes')
         .select('*')
@@ -437,12 +490,23 @@ export async function processSync(
 
       if (!notesError && Array.isArray(remoteNotes)) {
         for (const n of remoteNotes) {
-          await idbSaveNote(n as FinancialNote);
-          await idbSaveNote({ ...(n as FinancialNote), user_id: DEMO_USER_ID });
+          const isResolved = Boolean(n.is_resolved);
+          const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
+          const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
+
+          if (isExpired) {
+            // Auto-clean resolved notes older than 5 days from Supabase and IndexedDB
+            await supabase.from('financial_notes').delete().eq('id', n.id);
+            await idbDeleteNote(n.id, userId);
+            await idbDeleteNote(n.id, DEMO_USER_ID);
+          } else {
+            await idbSaveNote(n as FinancialNote);
+            await idbSaveNote({ ...(n as FinancialNote), user_id: DEMO_USER_ID });
+          }
         }
       }
 
-      // Push local notes to cloud if not yet on remote
+      // Push local notes to cloud if not yet on remote (auto-pruning expired resolved)
       const [userNotes, demoNotes] = await Promise.all([
         idbGetNotes(userId),
         idbGetNotes(DEMO_USER_ID),
@@ -454,6 +518,17 @@ export async function processSync(
       });
 
       for (const n of Array.from(localNoteMap.values())) {
+        const isResolved = Boolean(n.is_resolved);
+        const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
+        const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
+
+        if (isExpired) {
+          await idbDeleteNote(n.id, userId);
+          await idbDeleteNote(n.id, DEMO_USER_ID);
+          await supabase.from('financial_notes').delete().eq('id', n.id);
+          continue;
+        }
+
         if (!remoteNoteIds.has(n.id)) {
           await supabase.from('financial_notes').upsert({ ...n, user_id: userId }, { onConflict: 'id' });
           remoteNoteIds.add(n.id);

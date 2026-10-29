@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { formatDisplayDateTime } from '../lib/utils/formatters';
+import { MAX_AUDIT_TRAIL_LIMIT } from '../lib/constants';
 import {
   X,
   ShieldCheck,
@@ -15,6 +16,7 @@ import {
   Scale,
   Sparkles,
   Database,
+  Lock,
 } from 'lucide-react';
 
 interface AuditTrailModalProps {
@@ -38,6 +40,8 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
       log.entity_type.toLowerCase().includes(query)
     );
   });
+
+  const displayedLogs = filteredLogs.slice(0, MAX_AUDIT_TRAIL_LIMIT);
 
   const getActionBadge = (action: string) => {
     switch (action) {
@@ -84,9 +88,14 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
               <ShieldCheck className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Transaction Audit Trail</h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Transaction Audit Trail</h2>
+                <span className="rounded-full bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border border-indigo-500/20 px-2 py-0.5 text-[10px] font-semibold">
+                  Latest {MAX_AUDIT_TRAIL_LIMIT} Limit
+                </span>
+              </div>
               <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
-                Immutable chronological log of all ledger modifications
+                Immutable chronological log of ledger modifications (capped at {MAX_AUDIT_TRAIL_LIMIT} events)
               </p>
             </div>
           </div>
@@ -114,12 +123,12 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
 
         {/* List */}
         <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-          {filteredLogs.length === 0 ? (
+          {displayedLogs.length === 0 ? (
             <div className="text-center py-12 text-zinc-500 text-xs">
               No audit trail events recorded yet.
             </div>
           ) : (
-            filteredLogs.map((log) => {
+            displayedLogs.map((log) => {
               const badge = getActionBadge(log.action);
               const isExpanded = expandedId === log.id;
 
@@ -173,6 +182,23 @@ export function AuditTrailModal({ isOpen, onClose }: AuditTrailModalProps) {
               );
             })
           )}
+
+          {/* Teaser card after the limit */}
+          <div className="mt-4 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-r from-indigo-50/70 via-purple-50/40 to-pink-50/40 dark:from-indigo-950/30 dark:via-purple-950/20 dark:to-pink-950/20 p-4 text-center space-y-2">
+            <div className="flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-700 dark:text-indigo-400">
+              <Sparkles className="h-4 w-4 text-indigo-600 dark:text-indigo-400" />
+              <span>Audit Trail Limit (Latest {MAX_AUDIT_TRAIL_LIMIT} Events)</span>
+            </div>
+            <p className="text-[11px] text-zinc-600 dark:text-zinc-400 max-w-sm mx-auto">
+              To conserve database storage and keep cloud sync ultra-fast, logs are capped at the latest {MAX_AUDIT_TRAIL_LIMIT} entries.
+            </p>
+            <div className="pt-1">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-indigo-600 to-purple-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-500/20">
+                <Lock className="h-3.5 w-3.5" />
+                <span>Subscribe to see full history (Soon)</span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

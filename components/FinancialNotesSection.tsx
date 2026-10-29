@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { FinancialNote } from '../lib/types';
 import { formatINR, getTodayKolkata } from '../lib/utils/formatters';
+import { RESOLVED_NOTES_RETENTION_DAYS } from '../lib/constants';
 import { AddEditNoteModal } from './AddEditNoteModal';
 import { SettleNoteModal } from './SettleNoteModal';
 import {
@@ -91,8 +92,9 @@ export function FinancialNotesSection() {
   const [noteToSettle, setNoteToSettle] = useState<FinancialNote | null>(null);
 
   const today = getTodayKolkata();
+  const fiveDaysAgoMs = useMemo(() => Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000, []);
 
-  // Summary Metrics
+  // Summary Metrics (excludes resolved notes that have expired past 5 days)
   const summary = useMemo(() => {
     let receivable = 0;
     let payable = 0;
@@ -101,7 +103,10 @@ export function FinancialNotesSection() {
 
     notes.forEach((n) => {
       if (n.is_resolved) {
-        resolvedCount++;
+        const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
+        if (resolvedTime >= fiveDaysAgoMs) {
+          resolvedCount++;
+        }
       } else {
         activeCount++;
         if (n.amount) {
@@ -113,12 +118,26 @@ export function FinancialNotesSection() {
 
     const net = receivable - payable;
     return { receivable, payable, net, activeCount, resolvedCount };
-  }, [notes]);
+  }, [notes, fiveDaysAgoMs]);
 
-  // Filtered & Sorted Notes
+  const getRemainingDays = (resolvedAt?: string | null, updatedAt?: string | null) => {
+    const time = new Date(resolvedAt || updatedAt || Date.now()).getTime();
+    const ageMs = Date.now() - time;
+    const remainingMs = RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000 - ageMs;
+    const days = Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+    return Math.max(1, days);
+  };
+
+  // Filtered & Sorted Notes (5-day timeline for resolved; unresolved stay forever)
   const filteredNotes = useMemo(() => {
     return notes
       .filter((n) => {
+        // 5-Day hard filter for resolved notes
+        if (n.is_resolved) {
+          const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
+          if (resolvedTime < fiveDaysAgoMs) return false;
+        }
+
         // Tab Filter
         if (activeTab === 'active' && n.is_resolved) return false;
         if (activeTab === 'resolved' && !n.is_resolved) return false;
@@ -146,7 +165,7 @@ export function FinancialNotesSection() {
         // Then newest first
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-  }, [notes, activeTab, searchQuery]);
+  }, [notes, activeTab, searchQuery, fiveDaysAgoMs]);
 
   const handleTogglePin = async (note: FinancialNote, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -327,6 +346,16 @@ export function FinancialNotesSection() {
         </div>
       </div>
 
+      {/* 5-Day Retention Policy Notice for Resolved Tab */}
+      {activeTab === 'resolved' && (
+        <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200">
+          <Sparkles className="w-4 h-4 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span>
+            <strong>5-Day Retention Policy:</strong> Settled notes are automatically removed after 5 days to optimize cloud storage. Active dues and reminders stay indefinitely.
+          </span>
+        </div>
+      )}
+
       {/* Sticky Notes Grid */}
       {filteredNotes.length === 0 ? (
         <div className="text-center py-16 px-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-xs">
@@ -491,11 +520,14 @@ export function FinancialNotesSection() {
                       </span>
                     )}
 
-                    {/* Resolved status timestamp */}
+                    {/* Resolved status timestamp & 5-day expiration badge */}
                     {note.is_resolved && (
-                      <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-semibold">
+                      <span className="inline-flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">
                         <CheckCircle2 className="w-3 h-3" />
                         <span>Settled</span>
+                        <span className="text-[10px] font-normal text-zinc-500 dark:text-zinc-400 font-mono">
+                          (clears in {getRemainingDays(note.resolved_at, note.updated_at)}d)
+                        </span>
                       </span>
                     )}
                   </div>

@@ -239,3 +239,73 @@ CREATE TRIGGER tr_financial_notes_updated_at
     BEFORE UPDATE ON public.financial_notes
     FOR EACH ROW
     EXECUTE FUNCTION public.handle_updated_at();
+
+-- ------------------------------------------------------------------------------
+-- STORAGE OPTIMIZATION & AUTO-CLEANUP STRATEGIES
+-- ------------------------------------------------------------------------------
+
+-- 1. AUTOMATIC AUDIT TRAIL LIMIT (Capped to latest 50 events per user)
+CREATE OR REPLACE FUNCTION public.prune_user_audit_logs()
+RETURNS TRIGGER AS $$
+BEGIN
+    DELETE FROM public.audit_logs
+    WHERE id IN (
+        SELECT id FROM public.audit_logs
+        WHERE user_id = NEW.user_id
+        ORDER BY created_at DESC
+        OFFSET 50
+    );
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS tr_prune_audit_logs ON public.audit_logs;
+CREATE TRIGGER tr_prune_audit_logs
+    AFTER INSERT ON public.audit_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION public.prune_user_audit_logs();
+
+-- 2. MAINTENANCE PROCEDURE: CLEAN UP COMPLETED NOTES (5-Day Retention Timeline)
+CREATE OR REPLACE FUNCTION public.cleanup_expired_resolved_notes()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM public.financial_notes
+    WHERE is_resolved = true
+      AND (
+        (resolved_at IS NOT NULL AND resolved_at < NOW() - INTERVAL '5 days')
+        OR (resolved_at IS NULL AND updated_at < NOW() - INTERVAL '5 days')
+      );
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 3. MAINTENANCE PROCEDURE: PURGE TRANSACTIONS OLDER THAN 6 MONTHS
+CREATE OR REPLACE FUNCTION public.cleanup_transactions_older_than_6_months()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM public.transactions
+    WHERE transaction_date < (CURRENT_DATE - INTERVAL '6 months');
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+
+-- 4. MAINTENANCE PROCEDURE: PURGE SOFT-DELETED TOMBSTONES OLDER THAN 30 DAYS
+CREATE OR REPLACE FUNCTION public.cleanup_soft_deleted_transactions()
+RETURNS INTEGER AS $$
+DECLARE
+    deleted_count INTEGER;
+BEGIN
+    DELETE FROM public.transactions
+    WHERE is_deleted = true
+      AND updated_at < (NOW() - INTERVAL '30 days');
+    GET DIAGNOSTICS deleted_count = ROW_COUNT;
+    RETURN deleted_count;
+END;
+$$ LANGUAGE plpgsql;
+

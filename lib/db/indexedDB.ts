@@ -139,6 +139,28 @@ export async function idbUnmarkAccountDeleted(accountId: string, userId: string)
   await idbSetMeta(key, filtered);
 }
 
+// ---------------------- TRANSACTION DELETION TRACKING ----------------------
+export async function idbMarkTransactionDeleted(txId: string, userId: string): Promise<void> {
+  const key = `deleted_transactions_${userId}`;
+  const existing = (await idbGetMeta<string[]>(key)) || [];
+  if (!existing.includes(txId)) {
+    existing.push(txId);
+    await idbSetMeta(key, existing);
+  }
+}
+
+export async function idbGetDeletedTransactionIds(userId: string): Promise<string[]> {
+  const key = `deleted_transactions_${userId}`;
+  return (await idbGetMeta<string[]>(key)) || [];
+}
+
+export async function idbUnmarkTransactionDeleted(txId: string, userId: string): Promise<void> {
+  const key = `deleted_transactions_${userId}`;
+  const existing = (await idbGetMeta<string[]>(key)) || [];
+  const filtered = existing.filter((id) => id !== txId);
+  await idbSetMeta(key, filtered);
+}
+
 export async function idbDeleteAccount(id: string, userId: string): Promise<void> {
   await idbMarkAccountDeleted(id, userId);
   const db = await getDB();
@@ -330,6 +352,7 @@ export async function idbSaveTransactions(transactions: Transaction[]): Promise<
 }
 
 export async function idbDeleteTransaction(id: string, userId: string): Promise<void> {
+  await idbMarkTransactionDeleted(id, userId);
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('transactions', 'readwrite');

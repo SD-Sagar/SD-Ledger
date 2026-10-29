@@ -3,7 +3,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { Transaction } from '../lib/types';
-import { formatINR, formatDisplayDate, formatDisplayDateTime, getTodayKolkata } from '../lib/utils/formatters';
+import { formatINR, formatDisplayDate, formatDisplayDateTime, getTodayKolkata, getSixMonthsAgoKolkata } from '../lib/utils/formatters';
+import { TRANSACTION_HISTORY_MONTHS_LIMIT } from '../lib/constants';
 import {
   Search,
   Filter,
@@ -52,14 +53,15 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
   }, [accounts]);
 
   const [todayStr, setTodayStr] = useState('');
+  const sixMonthsAgoStr = useMemo(() => getSixMonthsAgoKolkata(), []);
 
   useEffect(() => {
     setTodayStr(getTodayKolkata());
   }, []);
 
-  // Compute date range based on preset
+  // Compute date range based on preset (strictly bounded to max 6 months)
   const dateRangeBounds = useMemo(() => {
-    if (!todayStr) return { start: '', end: '' };
+    if (!todayStr) return { start: sixMonthsAgoStr, end: '' };
     const parts = todayStr.split('-').map(Number);
     const today = new Date(parts[0], parts[1] - 1, parts[2]);
 
@@ -103,19 +105,25 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
         };
       }
 
-      case 'custom':
-        return { start: customStartDate, end: customEndDate };
+      case 'custom': {
+        const effectiveStart = customStartDate && customStartDate > sixMonthsAgoStr ? customStartDate : sixMonthsAgoStr;
+        return { start: effectiveStart, end: customEndDate };
+      }
 
       case 'all':
       default:
-        return { start: '', end: '' };
+        // Capped to the 6-month limit
+        return { start: sixMonthsAgoStr, end: todayStr };
     }
-  }, [datePreset, todayStr, customStartDate, customEndDate]);
+  }, [datePreset, todayStr, sixMonthsAgoStr, customStartDate, customEndDate]);
 
   // Filter transactions
   const filteredTransactions = useMemo(() => {
     return transactions.filter((t) => {
       if (t.is_deleted) return false;
+
+      // 6-Month Hard Limit: entries older than 6 months are excluded
+      if (t.transaction_date < sixMonthsAgoStr) return false;
 
       // Type filter
       if (typeFilter !== 'ALL' && t.type !== typeFilter) {
@@ -195,9 +203,12 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
             <span className="rounded-full bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 text-xs font-mono text-zinc-600 dark:text-zinc-300">
               {filteredStats.count} entries
             </span>
+            <span className="rounded-full bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20 px-2 py-0.5 text-[10px] font-semibold">
+              Past 6 Months
+            </span>
           </h2>
           <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-            Complete searchable history with atomic updates across calculated balances
+            Searchable history bounded to the past 6 months to maintain ultra-fast cloud synchronization
           </p>
         </div>
 
@@ -308,7 +319,7 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
                 { id: 'yesterday', label: 'Yesterday' },
                 { id: 'this_week', label: 'This Week' },
                 { id: 'last_month', label: 'Last Month' },
-                { id: 'all', label: 'All Time' },
+                { id: 'all', label: 'Last 6 Months' },
                 { id: 'custom', label: 'Custom' },
               ] as const
             ).map((p) => (
@@ -331,9 +342,11 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
         {datePreset === 'custom' && (
           <div className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 dark:bg-zinc-900/60 border border-zinc-200 dark:border-zinc-800">
             <div className="flex items-center gap-2">
-              <span className="text-xs text-zinc-500 dark:text-zinc-400">From:</span>
+              <span className="text-xs text-zinc-500 dark:text-zinc-400">From (Min 6M):</span>
               <input
                 type="date"
+                min={sixMonthsAgoStr}
+                max={todayStr}
                 value={customStartDate}
                 onChange={(e) => setCustomStartDate(e.target.value)}
                 className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1 text-xs text-zinc-900 dark:text-white"
@@ -343,6 +356,8 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
               <span className="text-xs text-zinc-500 dark:text-zinc-400">To:</span>
               <input
                 type="date"
+                min={sixMonthsAgoStr}
+                max={todayStr}
                 value={customEndDate}
                 onChange={(e) => setCustomEndDate(e.target.value)}
                 className="rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-2.5 py-1 text-xs text-zinc-900 dark:text-white"

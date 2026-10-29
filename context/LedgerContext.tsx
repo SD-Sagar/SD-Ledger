@@ -40,6 +40,8 @@ import {
   idbUpdateTransactionAccountIds,
   idbUpdateReconciliationAccountIds,
   idbRemapQueueAccountId,
+  idbGetDeletedTransactionIds,
+  idbMarkTransactionDeleted,
 } from '../lib/db/indexedDB';
 import { processSync, SyncResult } from '../lib/db/syncEngine';
 import { computeLedgerSummary } from '../lib/ledger/balanceEngine';
@@ -47,11 +49,17 @@ import { getSupabase } from '../lib/supabase/client';
 import {
   generateUUID,
   getTodayKolkata,
+  getSixMonthsAgoKolkata,
   getCurrentTimeKolkata,
   exportTransactionsToCSV,
   downloadFile,
 } from '../lib/utils/formatters';
-import { DEMO_USER_ID } from '../lib/constants';
+import {
+  DEMO_USER_ID,
+  MAX_AUDIT_TRAIL_LIMIT,
+  RESOLVED_NOTES_RETENTION_DAYS,
+  TRANSACTION_HISTORY_MONTHS_LIMIT,
+} from '../lib/constants';
 
 interface LedgerContextType {
   accounts: Account[];
@@ -249,11 +257,16 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       // If pure online mode (authenticated Supabase user) and device is online:
       if (uid !== DEMO_USER_ID && supabase && navigator.onLine) {
         try {
+          const deletedTxIds = new Set<string>([
+            ...(await idbGetDeletedTransactionIds(uid)),
+            ...(await idbGetDeletedTransactionIds(DEMO_USER_ID)),
+          ]);
+
           const [accRes, txRes, recRes, logRes, notesRes, localTxs, localNotes] = await Promise.all([
             supabase.from('accounts').select('*').eq('user_id', uid).order('account_index', { ascending: true }),
             supabase.from('transactions').select('*').eq('user_id', uid).order('transaction_date', { ascending: false }),
             supabase.from('reconciliations').select('*').eq('user_id', uid).order('reconciled_date', { ascending: false }),
-            supabase.from('audit_logs').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
+            supabase.from('audit_logs').select('*').eq('user_id', uid).order('created_at', { ascending: false }).limit(MAX_AUDIT_TRAIL_LIMIT),
             supabase.from('financial_notes').select('*').eq('user_id', uid).order('created_at', { ascending: false }),
             idbGetTransactions(uid),
             idbGetNotes(uid),
@@ -261,12 +274,20 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
           const remoteTxMap = new Map<string, Transaction>();
           if (txRes.data) {
-            (txRes.data as Transaction[]).forEach((rt) => remoteTxMap.set(rt.id, rt));
+            for (const rt of txRes.data as Transaction[]) {
+              if (rt.is_deleted || deletedTxIds.has(rt.id)) {
+                await idbDeleteTransaction(rt.id, uid);
+                await idbDeleteTransaction(rt.id, DEMO_USER_ID);
+              } else {
+                remoteTxMap.set(rt.id, rt);
+              }
+            }
           }
 
           // RECOVERY: Push any local transactions created on this device that failed to reach Supabase
+          // (Only truly active transactions that were never deleted)
           for (const lt of localTxs) {
-            if (!remoteTxMap.has(lt.id) && !lt.is_deleted) {
+            if (!remoteTxMap.has(lt.id) && !lt.is_deleted && !deletedTxIds.has(lt.id)) {
               const { sync_status, ...cloudTx } = lt;
               const { error: pushErr } = await supabase.from('transactions').upsert({
                 ...cloudTx,
@@ -280,12 +301,36 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          // RECOVERY & MIRROR FOR FINANCIAL NOTES
+          // RECOVERY & MIRROR FOR FINANCIAL NOTES (Auto-pruning resolved notes > 5 days)
+          const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
           const remoteNoteMap = new Map<string, FinancialNote>();
+
           if (notesRes.data) {
-            (notesRes.data as FinancialNote[]).forEach((rn) => remoteNoteMap.set(rn.id, rn));
+            for (const rn of notesRes.data as FinancialNote[]) {
+              const isResolved = Boolean(rn.is_resolved);
+              const resolvedTime = new Date(rn.resolved_at || rn.updated_at || rn.created_at || 0).getTime();
+              const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
+
+              if (isExpired) {
+                await supabase.from('financial_notes').delete().eq('id', rn.id);
+                await idbDeleteNote(rn.id, uid);
+              } else {
+                remoteNoteMap.set(rn.id, rn);
+              }
+            }
           }
+
           for (const ln of localNotes) {
+            const isResolved = Boolean(ln.is_resolved);
+            const resolvedTime = new Date(ln.resolved_at || ln.updated_at || ln.created_at || 0).getTime();
+            const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
+
+            if (isExpired) {
+              await idbDeleteNote(ln.id, uid);
+              await supabase.from('financial_notes').delete().eq('id', ln.id);
+              continue;
+            }
+
             if (!remoteNoteMap.has(ln.id)) {
               const { error: pushNoteErr } = await supabase.from('financial_notes').upsert({
                 ...ln,
@@ -336,11 +381,16 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
         if (linkedUid) {
           try {
+            const deletedTxIds = new Set<string>([
+              ...(await idbGetDeletedTransactionIds(DEMO_USER_ID)),
+              ...(await idbGetDeletedTransactionIds(linkedUid)),
+            ]);
+
             const [accRes, txRes, recRes, logRes, notesRes, localTxs, localNotes, localQueue] = await Promise.all([
               supabase.from('accounts').select('*').eq('user_id', linkedUid).order('account_index', { ascending: true }),
               supabase.from('transactions').select('*').eq('user_id', linkedUid).order('transaction_date', { ascending: false }),
               supabase.from('reconciliations').select('*').eq('user_id', linkedUid).order('reconciled_date', { ascending: false }),
-              supabase.from('audit_logs').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }),
+              supabase.from('audit_logs').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }).limit(MAX_AUDIT_TRAIL_LIMIT),
               supabase.from('financial_notes').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }),
               idbGetTransactions(DEMO_USER_ID),
               idbGetNotes(DEMO_USER_ID),
@@ -375,15 +425,27 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              const remoteTxs: Transaction[] = txRes.data.map((t: Transaction) => ({
-                ...t,
-                user_id: DEMO_USER_ID,
-                sync_status: 'synced',
-              }));
+              // Process remote transactions, soft-deleting any that were marked deleted
+              for (const rt of txRes.data as Transaction[]) {
+                if (rt.is_deleted || deletedTxIds.has(rt.id)) {
+                  await idbDeleteTransaction(rt.id, DEMO_USER_ID);
+                }
+              }
+
+              const remoteTxs: Transaction[] = (txRes.data as Transaction[])
+                .filter((t) => !t.is_deleted && !deletedTxIds.has(t.id))
+                .map((t: Transaction) => ({
+                  ...t,
+                  user_id: DEMO_USER_ID,
+                  sync_status: 'synced',
+                }));
 
               // Preserve any pending local offline entries
               const pendingLocalTxs = localTxs.filter(
-                (lt) => lt.sync_status === 'pending' || localQueue.some((q) => q.payload?.id === lt.id)
+                (lt) =>
+                  !deletedTxIds.has(lt.id) &&
+                  !lt.is_deleted &&
+                  (lt.sync_status === 'pending' || localQueue.some((q) => q.payload?.id === lt.id))
               );
 
               const mergedTxs = new Map<string, Transaction>();
@@ -406,24 +468,35 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (notesRes.data) {
+              const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
               const remoteNoteIds = new Set(notesRes.data.map((n: FinancialNote) => n.id));
+
               for (const ln of localNotes) {
-                if (
-                  !remoteNoteIds.has(ln.id) &&
-                  !localQueue.some((q) => q.payload?.id === ln.id)
-                ) {
+                const isResolved = Boolean(ln.is_resolved);
+                const resolvedTime = new Date(ln.resolved_at || ln.updated_at || ln.created_at || 0).getTime();
+                const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
+
+                if (isExpired || (!remoteNoteIds.has(ln.id) && !localQueue.some((q) => q.payload?.id === ln.id))) {
                   await idbDeleteNote(ln.id, DEMO_USER_ID);
                 }
               }
 
-              const remoteNotes: FinancialNote[] = notesRes.data.map((n: FinancialNote) => ({
-                ...n,
-                user_id: DEMO_USER_ID,
-              }));
+              const remoteNotes: FinancialNote[] = (notesRes.data as FinancialNote[])
+                .filter((n) => {
+                  const isResolved = Boolean(n.is_resolved);
+                  const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
+                  return !(isResolved && resolvedTime < fiveDaysAgoMs);
+                })
+                .map((n: FinancialNote) => ({
+                  ...n,
+                  user_id: DEMO_USER_ID,
+                }));
 
-              const pendingLocalNotes = localNotes.filter((ln) =>
-                localQueue.some((q) => q.payload?.id === ln.id)
-              );
+              const pendingLocalNotes = localNotes.filter((ln) => {
+                const isResolved = Boolean(ln.is_resolved);
+                const resolvedTime = new Date(ln.resolved_at || ln.updated_at || ln.created_at || 0).getTime();
+                return !(isResolved && resolvedTime < fiveDaysAgoMs) && localQueue.some((q) => q.payload?.id === ln.id);
+              });
 
               const mergedNotes = new Map<string, FinancialNote>();
               remoteNotes.forEach((rn) => mergedNotes.set(rn.id, rn));
@@ -559,13 +632,22 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // 3. Gather all local transactions from this user AND demo store
+      // 3. Gather all local transactions from this user AND demo store (excluding deleted)
+      const deletedTxIds = new Set<string>([
+        ...(await idbGetDeletedTransactionIds(effectiveUid)),
+        ...(await idbGetDeletedTransactionIds(DEMO_USER_ID)),
+      ]);
+      const nowIsoTombstone = new Date().toISOString();
+      for (const delId of deletedTxIds) {
+        await supabase.from('transactions').update({ is_deleted: true, updated_at: nowIsoTombstone }).eq('id', delId);
+      }
+
       const userTxs = await idbGetTransactions(effectiveUid);
       const demoTxs = await idbGetTransactions(DEMO_USER_ID);
       const allLocalTxs = [...userTxs, ...demoTxs];
       const txMap = new Map<string, Transaction>();
       allLocalTxs.forEach((t) => {
-        if (!txMap.has(t.id) && !t.is_deleted) txMap.set(t.id, t);
+        if (!txMap.has(t.id) && !t.is_deleted && !deletedTxIds.has(t.id)) txMap.set(t.id, t);
       });
 
       let pushed = 0;
@@ -1561,9 +1643,15 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('transactions').delete().eq('id', id);
+          const { error } = await supabase
+            .from('transactions')
+            .update({ is_deleted: true, updated_at: nowIso })
+            .eq('id', id);
+          if (error) {
+            console.error('Could not mark transaction deleted in Supabase:', error.message);
+          }
         } catch (cloudErr) {
-          console.warn('Could not delete transaction from Supabase:', cloudErr);
+          console.warn('Could not mark transaction deleted in Supabase:', cloudErr);
         }
       }
     } else {
@@ -1571,7 +1659,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         id: generateUUID(),
         table: 'transactions',
         action: 'DELETE',
-        payload: { id },
+        payload: { id, is_deleted: true },
         created_at: nowIso,
         retries: 0,
       });

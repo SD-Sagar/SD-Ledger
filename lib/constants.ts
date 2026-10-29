@@ -42,3 +42,9 @@ export const ACCOUNT_COLORS = [
 
 export const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const DEMO_USER_EMAIL = 'demo@sd-ledger.local';
+
+// Storage & Optimization Limits
+export const MAX_AUDIT_TRAIL_LIMIT = 50; // Maximum chronological audit trail events retained/displayed
+export const TRANSACTION_HISTORY_MONTHS_LIMIT = 6; // Transaction history limit in months (6 months)
+export const RESOLVED_NOTES_RETENTION_DAYS = 5; // Timeline to keep resolved notes before auto-cleanup (5 days)
+
