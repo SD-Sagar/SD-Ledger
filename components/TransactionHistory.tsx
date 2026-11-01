@@ -263,49 +263,52 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
         {/* Row 2: Type Filter Chips & Date Presets */}
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Type filters */}
-          <div className="flex items-center gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 p-1 border border-zinc-200 dark:border-zinc-800 text-xs font-medium">
+          <div className="w-full sm:w-auto grid grid-cols-4 sm:flex items-center gap-1 rounded-xl bg-zinc-100 dark:bg-zinc-900 p-1 border border-zinc-200 dark:border-zinc-800 text-xs font-medium">
             <button
               onClick={() => setTypeFilter('ALL')}
-              className={`px-3 py-1 rounded-lg transition-colors ${
+              className={`px-2 sm:px-3 py-1 rounded-lg text-center transition-colors ${
                 typeFilter === 'ALL'
                   ? 'bg-white dark:bg-zinc-800 text-zinc-950 dark:text-white font-semibold shadow-sm'
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              All Types
+              <span className="sm:hidden">All</span>
+              <span className="hidden sm:inline">All Types</span>
             </button>
             <button
               onClick={() => setTypeFilter('EXPENSE')}
-              className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1 ${
+              className={`px-2 sm:px-3 py-1 rounded-lg transition-colors flex items-center justify-center gap-1 ${
                 typeFilter === 'EXPENSE'
                   ? 'bg-rose-50 dark:bg-rose-600/30 text-rose-700 dark:text-rose-300 font-semibold border border-rose-200 dark:border-rose-500/30'
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              <ArrowUpRight className="h-3 w-3 text-rose-500 dark:text-rose-400" />
-              Expenses
+              <ArrowUpRight className="h-3 w-3 text-rose-500 dark:text-rose-400 shrink-0" />
+              <span className="sm:hidden">Expense</span>
+              <span className="hidden sm:inline">Expenses</span>
             </button>
             <button
               onClick={() => setTypeFilter('INCOME')}
-              className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1 ${
+              className={`px-2 sm:px-3 py-1 rounded-lg transition-colors flex items-center justify-center gap-1 ${
                 typeFilter === 'INCOME'
                   ? 'bg-emerald-50 dark:bg-emerald-600/30 text-emerald-700 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-500/30'
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              <ArrowDownLeft className="h-3 w-3 text-emerald-500 dark:text-emerald-400" />
-              Income
+              <ArrowDownLeft className="h-3 w-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+              <span>Income</span>
             </button>
             <button
               onClick={() => setTypeFilter('TRANSFER')}
-              className={`px-3 py-1 rounded-lg transition-colors flex items-center gap-1 ${
+              className={`px-2 sm:px-3 py-1 rounded-lg transition-colors flex items-center justify-center gap-1 ${
                 typeFilter === 'TRANSFER'
                   ? 'bg-indigo-50 dark:bg-indigo-600/30 text-indigo-700 dark:text-indigo-300 font-semibold border border-indigo-200 dark:border-indigo-500/30'
                   : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              <ArrowRightLeft className="h-3 w-3 text-indigo-500 dark:text-indigo-400" />
-              Transfers
+              <ArrowRightLeft className="h-3 w-3 text-indigo-500 dark:text-indigo-400 shrink-0" />
+              <span className="sm:hidden">Transfer</span>
+              <span className="hidden sm:inline">Transfers</span>
             </button>
           </div>
 

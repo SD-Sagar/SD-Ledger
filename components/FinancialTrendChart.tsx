@@ -25,6 +25,16 @@ interface ChartPoint {
   value: number;
 }
 
+// Indian compact currency formatting (e.g. ₹54.2k, ₹1.2L)
+function formatCompactINR(val: number): string {
+  const abs = Math.abs(val);
+  const sign = val < 0 ? '-' : '';
+  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(1)}Cr`;
+  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}k`;
+  return `${sign}₹${Math.round(abs)}`;
+}
+
 export function FinancialTrendChart({ accounts, transactions }: FinancialTrendChartProps) {
   const [metric, setMetric] = useState<MetricType>('BALANCE');
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
@@ -258,7 +268,7 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
   // SVG Geometry Calculation
   const svgWidth = 800;
   const svgHeight = 240;
-  const padding = { top: 20, right: 30, bottom: 35, left: 20 };
+  const padding = { top: 22, right: 48, bottom: 35, left: 18 };
 
   const plotWidth = svgWidth - padding.left - padding.right;
   const plotHeight = svgHeight - padding.top - padding.bottom;
@@ -316,8 +326,28 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
 
   // Color theme: Emerald for balance/credit, Rose for expense or negative balance
   const isThemePositive = metric === 'EXPENSE' ? false : periodChange.isPositive;
-  const strokeColor = isThemePositive ? '#10b981' : '#f43f5e';
+
+  // Refined dual-gradient palette for subtle, glowing fintech aesthetics
+  const startColor =
+    metric === 'EXPENSE'
+      ? '#f59e0b' // Amber
+      : metric === 'CREDIT'
+      ? '#06b6d4' // Cyan
+      : isThemePositive
+      ? '#10b981' // Emerald
+      : '#fb7185'; // Soft Rose
+
+  const endColor =
+    metric === 'EXPENSE'
+      ? '#f43f5e' // Rose
+      : metric === 'CREDIT'
+      ? '#10b981' // Emerald
+      : isThemePositive
+      ? '#14b8a6' // Teal
+      : '#e11d48'; // Rose red
+
   const gradientId = `trendGradient_${metric}_${isThemePositive ? 'pos' : 'neg'}`;
+  const lineGradId = `lineGrad_${metric}_${isThemePositive ? 'pos' : 'neg'}`;
 
   // Interactive scrubber handling
   const handlePointerMove = useCallback((clientX: number) => {
@@ -352,6 +382,16 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
     if (!hoveredPoint) return null;
     return pointsMap.find((c) => c.pt.date === hoveredPoint.date) || null;
   }, [hoveredPoint, pointsMap]);
+
+  // High, Low, Average statistics for the period
+  const stats = useMemo(() => {
+    if (dataPoints.length === 0) return { high: 0, low: 0, avg: 0 };
+    const vals = dataPoints.map((p) => p.value);
+    const high = Math.max(...vals);
+    const low = Math.min(...vals);
+    const avg = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 100) / 100;
+    return { high, low, avg };
+  }, [dataPoints]);
 
   // Milestone Date ticks for X axis (3 to 5 evenly spaced)
   const dateMilestones = useMemo(() => {
@@ -503,7 +543,7 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
         onMouseLeave={onPointerLeave}
         onTouchEnd={onPointerLeave}
         className="relative mt-4 w-full cursor-crosshair select-none touch-none"
-        style={{ height: '220px' }}
+        style={{ height: '230px' }}
       >
         <svg
           viewBox={`0 0 ${svgWidth} ${svgHeight}`}
@@ -511,41 +551,80 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
           className="h-full w-full overflow-visible"
         >
           <defs>
+            {/* Smooth 4-Stop Vertical Gradient for Area */}
             <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={strokeColor} stopOpacity={0.28} />
-              <stop offset="60%" stopColor={strokeColor} stopOpacity={0.08} />
-              <stop offset="100%" stopColor={strokeColor} stopOpacity={0.0} />
+              <stop offset="0%" stopColor={startColor} stopOpacity={0.32} />
+              <stop offset="35%" stopColor={endColor} stopOpacity={0.14} />
+              <stop offset="70%" stopColor={endColor} stopOpacity={0.03} />
+              <stop offset="100%" stopColor={endColor} stopOpacity={0.0} />
+            </linearGradient>
+
+            {/* Horizontal Line Gradient */}
+            <linearGradient id={lineGradId} x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={startColor} />
+              <stop offset="100%" stopColor={endColor} />
             </linearGradient>
           </defs>
 
-          {/* DOTTED HORIZONTAL GRIDLINES */}
-          <line
-            x1={padding.left}
-            y1={padding.top}
-            x2={svgWidth - padding.right}
-            y2={padding.top}
-            stroke="currentColor"
-            strokeDasharray="4 4"
-            className="text-zinc-200 dark:text-zinc-800/80"
-          />
-          <line
-            x1={padding.left}
-            y1={padding.top + plotHeight / 2}
-            x2={svgWidth - padding.right}
-            y2={padding.top + plotHeight / 2}
-            stroke="currentColor"
-            strokeDasharray="4 4"
-            className="text-zinc-200 dark:text-zinc-800/80"
-          />
-          <line
-            x1={padding.left}
-            y1={padding.top + plotHeight}
-            x2={svgWidth - padding.right}
-            y2={padding.top + plotHeight}
-            stroke="currentColor"
-            strokeDasharray="4 4"
-            className="text-zinc-200 dark:text-zinc-800/80"
-          />
+          {/* DOTTED HORIZONTAL GRIDLINES WITH RIGHT-ALIGNED COMPACT VALUE LABELS */}
+          <g className="opacity-70 dark:opacity-60">
+            {/* Top Gridline */}
+            <line
+              x1={padding.left}
+              y1={padding.top}
+              x2={svgWidth - padding.right}
+              y2={padding.top}
+              stroke="currentColor"
+              strokeDasharray="3 4"
+              className="text-zinc-200 dark:text-zinc-800"
+            />
+            <text
+              x={svgWidth - padding.right + 6}
+              y={padding.top + 3}
+              textAnchor="start"
+              className="fill-zinc-400 dark:fill-zinc-500 font-mono text-[9px] font-semibold"
+            >
+              {formatCompactINR(maxVal)}
+            </text>
+
+            {/* Mid Gridline */}
+            <line
+              x1={padding.left}
+              y1={padding.top + plotHeight / 2}
+              x2={svgWidth - padding.right}
+              y2={padding.top + plotHeight / 2}
+              stroke="currentColor"
+              strokeDasharray="3 4"
+              className="text-zinc-200 dark:text-zinc-800"
+            />
+            <text
+              x={svgWidth - padding.right + 6}
+              y={padding.top + plotHeight / 2 + 3}
+              textAnchor="start"
+              className="fill-zinc-400 dark:fill-zinc-500 font-mono text-[9px] font-semibold"
+            >
+              {formatCompactINR((maxVal + minVal) / 2)}
+            </text>
+
+            {/* Bottom Gridline */}
+            <line
+              x1={padding.left}
+              y1={padding.top + plotHeight}
+              x2={svgWidth - padding.right}
+              y2={padding.top + plotHeight}
+              stroke="currentColor"
+              strokeDasharray="3 4"
+              className="text-zinc-200 dark:text-zinc-800"
+            />
+            <text
+              x={svgWidth - padding.right + 6}
+              y={padding.top + plotHeight + 3}
+              textAnchor="start"
+              className="fill-zinc-400 dark:fill-zinc-500 font-mono text-[9px] font-semibold"
+            >
+              {formatCompactINR(minVal)}
+            </text>
+          </g>
 
           {/* GRADIENT FILL AREA UNDER CURVE */}
           {areaD && (
@@ -556,23 +635,23 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
             />
           )}
 
-          {/* MAIN SMOOTH CURVE PATH */}
+          {/* CRISP SHARP FOREGROUND TRENDLINE */}
           {pathD && (
             <path
               d={pathD}
               fill="none"
-              stroke={strokeColor}
+              stroke={`url(#${lineGradId})`}
               strokeWidth="2.5"
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="transition-all duration-300 drop-shadow"
+              className="transition-all duration-300"
             />
           )}
 
-          {/* INTERACTIVE CROSSHAIR & GLOWING DOT */}
+          {/* INTERACTIVE CROSSHAIR & GLOWING RADAR DOT */}
           {activeCoord && (
             <>
-              {/* Vertical Dashed Line */}
+              {/* Vertical Dashed Guide Line */}
               <line
                 x1={activeCoord.x}
                 y1={padding.top}
@@ -584,13 +663,13 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
                 className="text-zinc-400 dark:text-zinc-600 animate-in fade-in"
               />
 
-              {/* Glowing Outer Ping */}
+              {/* Glowing Outer Ping Radar */}
               <circle
                 cx={activeCoord.x}
                 cy={activeCoord.y}
-                r="7"
-                fill={strokeColor}
-                opacity="0.3"
+                r="8"
+                fill={startColor}
+                opacity="0.35"
                 className="animate-ping"
               />
 
@@ -598,19 +677,19 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
               <circle
                 cx={activeCoord.x}
                 cy={activeCoord.y}
-                r="5.5"
+                r="6"
                 fill="white"
-                stroke={strokeColor}
+                stroke={startColor}
                 strokeWidth="2.5"
-                className="dark:fill-zinc-950"
+                className="dark:fill-zinc-950 shadow-md"
               />
 
-              {/* Inner Solid Dot */}
+              {/* Inner Glowing Center Dot */}
               <circle
                 cx={activeCoord.x}
                 cy={activeCoord.y}
                 r="2.5"
-                fill={strokeColor}
+                fill={endColor}
               />
             </>
           )}
@@ -622,38 +701,68 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
               x={m.x}
               y={svgHeight - 8}
               textAnchor={idx === 0 ? 'start' : idx === dateMilestones.length - 1 ? 'end' : 'middle'}
-              className="fill-zinc-400 dark:fill-zinc-500 font-mono text-[10px]"
+              className="fill-zinc-400 dark:fill-zinc-500 font-mono text-[10px] font-medium"
             >
               {m.label}
             </text>
           ))}
         </svg>
 
-        {/* FLOATING SCRUBBER TOOLTIP (WHEN USER HOVERS/TOUCHES) */}
+        {/* FLOATING SCRUBBER TOOLTIP (CLAMPED & RESPONSIVE) */}
         {activeCoord && (
           <div
-            className="pointer-events-none absolute -top-1 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 px-3 py-1.5 shadow-xl backdrop-blur-md text-xs font-mono z-30 transition-all -translate-x-1/2"
+            className="pointer-events-none absolute -top-3 z-30 -translate-x-1/2 rounded-2xl border border-zinc-200/90 dark:border-zinc-700/80 bg-white/95 dark:bg-zinc-900/95 px-3 py-1.5 shadow-xl backdrop-blur-xl text-xs font-mono transition-all animate-in fade-in zoom-in-95 duration-100"
             style={{
-              left: `${(activeCoord.x / svgWidth) * 100}%`,
+              left: `${Math.min(86, Math.max(14, (activeCoord.x / svgWidth) * 100))}%`,
             }}
           >
-            <p className="text-[10px] text-zinc-400 dark:text-zinc-500 whitespace-nowrap">
-              {activeCoord.pt.displayDate}
-            </p>
-            <p className="font-bold text-zinc-900 dark:text-white whitespace-nowrap">
+            <div className="flex items-center justify-between gap-3 text-[10px] text-zinc-500 dark:text-zinc-400">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: startColor }} />
+                <span>{activeCoord.pt.displayDate}</span>
+              </span>
+              {dataPoints[0] && (
+                <span
+                  className={`font-semibold ${
+                    activeCoord.pt.value >= dataPoints[0].value
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-rose-600 dark:text-rose-400'
+                  }`}
+                >
+                  {activeCoord.pt.value >= dataPoints[0].value ? '+' : ''}
+                  {formatINR(activeCoord.pt.value - dataPoints[0].value)}
+                </span>
+              )}
+            </div>
+            <p className="mt-0.5 text-sm sm:text-base font-extrabold tracking-tight text-zinc-900 dark:text-white whitespace-nowrap">
               {formatINR(activeCoord.pt.value)}
             </p>
           </div>
         )}
       </div>
 
-      {/* BOTTOM CONTROLS: TIME HORIZON PILLS (1W, 1M, 3M, 6M, 1Y, ALL) */}
-      <div className="mt-3 flex items-center justify-between border-t border-zinc-100 dark:border-zinc-800/80 pt-3">
-        <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 hidden sm:inline">
-          Time Horizon
-        </span>
+      {/* BOTTOM CONTROLS: STATS STRIP & TIME HORIZON PILLS */}
+      <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-t border-zinc-100 dark:border-zinc-800/80 pt-3">
+        {/* Sleek Period Statistics (High / Low / Average) */}
+        <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-mono text-zinc-500 dark:text-zinc-400">
+          <span className="flex items-center gap-1">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">High</span>
+            <strong className="text-zinc-800 dark:text-zinc-200">{formatCompactINR(stats.high)}</strong>
+          </span>
+          <span className="text-zinc-300 dark:text-zinc-700">•</span>
+          <span className="flex items-center gap-1">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Low</span>
+            <strong className="text-zinc-800 dark:text-zinc-200">{formatCompactINR(stats.low)}</strong>
+          </span>
+          <span className="text-zinc-300 dark:text-zinc-700 hidden md:inline">•</span>
+          <span className="hidden md:flex items-center gap-1">
+            <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">Avg</span>
+            <strong className="text-zinc-800 dark:text-zinc-200">{formatCompactINR(stats.avg)}</strong>
+          </span>
+        </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 w-full sm:w-auto justify-between sm:justify-end">
+        {/* Time Horizon Pills */}
+        <div className="flex items-center gap-1 sm:gap-1.5 w-full sm:w-auto justify-between sm:justify-end">
           {(['1W', '1M', '3M', '6M', '1Y', 'ALL'] as const).map((h) => (
             <button
               key={h}

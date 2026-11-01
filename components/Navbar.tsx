@@ -18,6 +18,7 @@ import {
   Moon,
   ArrowLeftRight,
   MoreVertical,
+  Calculator,
 } from 'lucide-react';
 import { DEMO_USER_ID } from '../lib/constants';
 import { BrandLogo } from './BrandLogo';
@@ -25,15 +26,17 @@ import { BrandLogo } from './BrandLogo';
 interface NavbarProps {
   onOpenAuth: (prompt?: string) => void;
   onOpenBackup: () => void;
-  onOpenSupabaseGuide: () => void;
+  onOpenCalculator: () => void;
   onOpenAuditTrail: () => void;
+  onOpenSupabaseGuide?: () => void;
 }
 
 export function Navbar({
   onOpenAuth,
   onOpenBackup,
-  onOpenSupabaseGuide,
+  onOpenCalculator,
   onOpenAuditTrail,
+  onOpenSupabaseGuide,
 }: NavbarProps) {
   const { user, isDemoUser, signOut } = useAuth();
   const {
@@ -133,8 +136,8 @@ export function Navbar({
                   className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-cyan-300/80 dark:border-cyan-800/80 bg-cyan-50/90 dark:bg-cyan-950/60 p-1 sm:px-2.5 sm:py-1 text-xs font-medium text-cyan-800 dark:text-cyan-300 shadow-sm"
                   title={linkedCloudAccount ? `Linked Cloud: ${linkedCloudAccount}. Click Live Sync to pull latest cloud records.` : 'No cloud account linked yet'}
                 >
-                  <Database className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0 hidden xs:inline" />
-                  <span className="max-w-[60px] xs:max-w-[85px] sm:max-w-[130px] truncate text-[11px] font-medium">
+                  <Database className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0 hidden sm:inline" />
+                  <span className="hidden sm:inline max-w-[130px] truncate text-[11px] font-medium">
                     {linkedCloudAccount ? linkedCloudAccount : 'No Cloud'}
                   </span>
 
@@ -216,6 +219,17 @@ export function Navbar({
               )}
             </button>
 
+            {/* Quick Calculator Button (Available on all screens & desktop) */}
+            <button
+              type="button"
+              onClick={onOpenCalculator}
+              title="Quick Calculator (Keyboard Supported)"
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/80 dark:bg-emerald-950/30 p-2 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-xs"
+            >
+              <Calculator className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span className="hidden sm:inline">Calculator</span>
+            </button>
+
             {/* DESKTOP-ONLY QUICK UTILITIES (VISIBLE ON XL SCREENS 1280PX+) */}
             {/* Audit Trail Button */}
             <button
@@ -235,16 +249,6 @@ export function Navbar({
             >
               <Download className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
               <span>Backup</span>
-            </button>
-
-            {/* Supabase Guide Button */}
-            <button
-              onClick={onOpenSupabaseGuide}
-              title="Supabase Setup & SQL RLS Guide"
-              className="hidden xl:flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 px-2.5 py-1.5 text-xs font-medium dark:text-emerald-300 transition-colors dark:hover:bg-emerald-900/40"
-            >
-              <Database className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
-              <span>Supabase</span>
             </button>
 
             {/* Switch Account (Desktop) */}
@@ -358,12 +362,12 @@ export function Navbar({
                   <button
                     onClick={() => {
                       setShowMoreMenu(false);
-                      onOpenSupabaseGuide();
+                      onOpenCalculator();
                     }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
+                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
                   >
-                    <Database className="h-4 w-4 text-emerald-500" />
-                    <span>Supabase Setup Guide</span>
+                    <Calculator className="h-4 w-4 text-emerald-500" />
+                    <span>Quick Calculator</span>
                   </button>
 
                   {user && (

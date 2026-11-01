@@ -235,7 +235,7 @@ export function BrandLogo({
           </div>
 
           {subtext && (
-            <p className={`text-zinc-500 dark:text-zinc-400 truncate ${sizeConfig.sub}`}>
+            <p className={`hidden sm:block text-zinc-500 dark:text-zinc-400 truncate ${sizeConfig.sub}`}>
               {subtext}
             </p>
           )}

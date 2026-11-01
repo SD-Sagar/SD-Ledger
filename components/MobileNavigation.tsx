@@ -16,7 +16,7 @@ interface MobileNavigationProps {
   onOpenIncome: () => void;
   onOpenTransfer: () => void;
   onOpenBackup: () => void;
-  onOpenGuide: () => void;
+  onOpenCalculator?: () => void;
   onOpenAudit: () => void;
 }
 
@@ -25,7 +25,7 @@ export function MobileNavigation({
   onOpenIncome,
   onOpenTransfer,
   onOpenBackup,
-  onOpenGuide,
+  onOpenCalculator,
   onOpenAudit,
 }: MobileNavigationProps) {
   return (

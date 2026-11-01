@@ -9,7 +9,7 @@ import { Dashboard } from '../components/Dashboard';
 import { SetupWizard } from '../components/SetupWizard';
 import { AuthModal } from '../components/AuthModal';
 import { BackupRestoreModal } from '../components/BackupRestoreModal';
-import { SupabaseGuideModal } from '../components/SupabaseGuideModal';
+import { QuickCalculatorModal } from '../components/QuickCalculatorModal';
 import { AuditTrailModal } from '../components/AuditTrailModal';
 import { AddTransactionModal } from '../components/AddTransactionModal';
 import { TransferModal } from '../components/TransferModal';
@@ -25,7 +25,7 @@ function MainAppContent() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authPromptMessage, setAuthPromptMessage] = useState<string | null>(null);
   const [showBackupModal, setShowBackupModal] = useState(false);
-  const [showGuideModal, setShowGuideModal] = useState(false);
+  const [showCalculatorModal, setShowCalculatorModal] = useState(false);
   const [showAuditModal, setShowAuditModal] = useState(false);
 
   // Mobile quick action modals
@@ -68,7 +68,7 @@ function MainAppContent() {
       <Navbar
         onOpenAuth={handleOpenAuth}
         onOpenBackup={() => setShowBackupModal(true)}
-        onOpenSupabaseGuide={() => setShowGuideModal(true)}
+        onOpenCalculator={() => setShowCalculatorModal(true)}
         onOpenAuditTrail={() => setShowAuditModal(true)}
       />
 
@@ -110,10 +110,10 @@ function MainAppContent() {
                   </button>
 
                   <button
-                    onClick={() => setShowGuideModal(true)}
+                    onClick={() => setShowCalculatorModal(true)}
                     className="w-full text-center text-xs text-zinc-500 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors pt-1"
                   >
-                    Need to set up Supabase? Open Guide &rarr;
+                    Quick Calculator &rarr;
                   </button>
                 </div>
               </div>
@@ -133,7 +133,7 @@ function MainAppContent() {
           onOpenIncome={() => setShowMobileIncomeModal(true)}
           onOpenTransfer={() => setShowMobileTransferModal(true)}
           onOpenBackup={() => setShowBackupModal(true)}
-          onOpenGuide={() => setShowGuideModal(true)}
+          onOpenCalculator={() => setShowCalculatorModal(true)}
           onOpenAudit={() => setShowAuditModal(true)}
         />
       )}
@@ -150,10 +150,10 @@ function MainAppContent() {
           </div>
           <div className="flex items-center gap-4 text-zinc-500 dark:text-zinc-400">
             <button
-              onClick={() => setShowGuideModal(true)}
+              onClick={() => setShowCalculatorModal(true)}
               className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
             >
-              Supabase & Vercel Guide
+              Quick Calculator
             </button>
             <button
               onClick={() => setShowBackupModal(true)}
@@ -183,9 +183,9 @@ function MainAppContent() {
         onClose={() => setShowBackupModal(false)}
       />
 
-      <SupabaseGuideModal
-        isOpen={showGuideModal}
-        onClose={() => setShowGuideModal(false)}
+      <QuickCalculatorModal
+        isOpen={showCalculatorModal}
+        onClose={() => setShowCalculatorModal(false)}
       />
 
       <AuditTrailModal

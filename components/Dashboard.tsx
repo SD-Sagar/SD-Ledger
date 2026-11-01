@@ -198,101 +198,121 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
         </div>
       )}
 
-      {/* SEGMENTED VIEW NAVIGATION TABS (PREVENTS ENDLESS VERTICAL SCROLL) */}
-      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 pb-2 overflow-x-auto no-scrollbar gap-2">
-        <div className="flex items-center gap-1.5 sm:gap-2">
+      {/* SEGMENTED VIEW NAVIGATION TABS (FULL ACCESS ON ANY SCREEN WITHOUT SIDE SCROLLING) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 pb-2 gap-2">
+        <div className="grid grid-cols-5 gap-1 sm:flex sm:items-center sm:gap-2 w-full sm:w-auto">
+          {/* Tab 1: Overview & Trends */}
           <button
             type="button"
             onClick={() => setActiveTab('overview')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shrink-0 ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-1 sm:px-3.5 py-2 text-xs font-bold transition-all text-center ${
               activeTab === 'overview'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
-            <Activity className="h-4 w-4" />
-            <span>Overview &amp; Trends</span>
+            <Activity className="h-4 w-4 shrink-0" />
+            <span className="text-[10px] sm:text-xs">
+              <span className="sm:hidden">Trends</span>
+              <span className="hidden sm:inline">Overview &amp; Trends</span>
+            </span>
           </button>
 
+          {/* Tab 2: Accounts */}
           <button
             type="button"
             onClick={() => setActiveTab('accounts')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shrink-0 ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-1 sm:px-3.5 py-2 text-xs font-bold transition-all text-center ${
               activeTab === 'accounts'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
-            <Wallet className="h-4 w-4" />
-            <span>Accounts</span>
-            <span
-              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
-                activeTab === 'accounts'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
-              }`}
-            >
-              {accounts.length}
-            </span>
+            <Wallet className="h-4 w-4 shrink-0" />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] sm:text-xs">Accounts</span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[9px] sm:text-[10px] font-mono hidden md:inline-block ${
+                  activeTab === 'accounts'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                }`}
+              >
+                {accounts.length}
+              </span>
+            </div>
           </button>
 
+          {/* Tab 3: Transactions */}
           <button
             type="button"
             onClick={() => setActiveTab('transactions')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shrink-0 ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-1 sm:px-3.5 py-2 text-xs font-bold transition-all text-center ${
               activeTab === 'transactions'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
-            <History className="h-4 w-4" />
-            <span>Transactions</span>
-            <span
-              className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
-                activeTab === 'transactions'
-                  ? 'bg-white/20 text-white'
-                  : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
-              }`}
-            >
-              {transactions.filter((t) => !t.is_deleted).length}
-            </span>
+            <History className="h-4 w-4 shrink-0" />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] sm:text-xs">
+                <span className="sm:hidden">History</span>
+                <span className="hidden sm:inline">Transactions</span>
+              </span>
+              <span
+                className={`rounded-full px-1.5 py-0.2 text-[9px] sm:text-[10px] font-mono hidden md:inline-block ${
+                  activeTab === 'transactions'
+                    ? 'bg-white/20 text-white'
+                    : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400'
+                }`}
+              >
+                {transactions.filter((t) => !t.is_deleted).length}
+              </span>
+            </div>
           </button>
 
+          {/* Tab 4: Notes */}
           <button
             type="button"
             onClick={() => setActiveTab('notes')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shrink-0 ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-1 sm:px-3.5 py-2 text-xs font-bold transition-all text-center ${
               activeTab === 'notes'
                 ? 'bg-amber-600 text-white shadow-md shadow-amber-600/20'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
-            <StickyNote className="h-4 w-4" />
-            <span>Notes &amp; Dues</span>
-            {notes.filter((n) => !n.is_resolved).length > 0 && (
-              <span
-                className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
-                  activeTab === 'notes'
-                    ? 'bg-white/20 text-white'
-                    : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold'
-                }`}
-              >
-                {notes.filter((n) => !n.is_resolved).length}
+            <StickyNote className="h-4 w-4 shrink-0" />
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] sm:text-xs">
+                <span className="sm:hidden">Notes</span>
+                <span className="hidden sm:inline">Notes &amp; Dues</span>
               </span>
-            )}
+              {notes.filter((n) => !n.is_resolved).length > 0 && (
+                <span
+                  className={`rounded-full px-1.5 py-0.2 text-[9px] sm:text-[10px] font-mono ${
+                    activeTab === 'notes'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-semibold'
+                  }`}
+                >
+                  {notes.filter((n) => !n.is_resolved).length}
+                </span>
+              )}
+            </div>
           </button>
 
+          {/* Tab 5: Reconcile */}
           <button
             type="button"
             onClick={() => setActiveTab('reconcile')}
-            className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shrink-0 ${
+            className={`flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2 rounded-xl px-1 sm:px-3.5 py-2 text-xs font-bold transition-all text-center ${
               activeTab === 'reconcile'
                 ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
                 : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-100 dark:hover:bg-zinc-900'
             }`}
           >
-            <Scale className="h-4 w-4" />
-            <span>Reconcile</span>
+            <Scale className="h-4 w-4 shrink-0" />
+            <span className="text-[10px] sm:text-xs">Reconcile</span>
           </button>
         </div>
 
