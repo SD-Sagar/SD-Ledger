@@ -20,16 +20,21 @@ import {
   CloudCheck,
   CloudOff,
   Download,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 interface TransactionHistoryProps {
   onEditTransaction: (tx: Transaction) => void;
+  onOpenMonthlyReport?: () => void;
 }
 
 type DateFilterPreset = 'all' | 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'custom';
 type TypeFilter = 'ALL' | 'EXPENSE' | 'INCOME' | 'TRANSFER';
 
-export function TransactionHistory({ onEditTransaction }: TransactionHistoryProps) {
+export function TransactionHistory({
+  onEditTransaction,
+  onOpenMonthlyReport,
+}: TransactionHistoryProps) {
   const { transactions, accounts, deleteTransaction, exportCSV } = useLedger();
 
   // Search and Filters
@@ -212,13 +217,27 @@ export function TransactionHistory({ onEditTransaction }: TransactionHistoryProp
           </p>
         </div>
 
-        <button
-          onClick={exportCSV}
-          className="flex items-center justify-center gap-1.5 self-start sm:self-center rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:border-emerald-500/50 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-all shadow-sm"
-        >
-          <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>Export Filtered to CSV</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-center">
+          {onOpenMonthlyReport && (
+            <button
+              type="button"
+              onClick={onOpenMonthlyReport}
+              className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-200 hover:border-emerald-500/50 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-all shadow-xs"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Monthly Report</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={exportCSV}
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-200 hover:border-emerald-500/50 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-all shadow-xs"
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Export CSV</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter Toolbar */}

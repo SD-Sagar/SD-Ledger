@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { useAuth } from '../context/AuthContext';
-import { formatINR, formatDisplayDate } from '../lib/utils/formatters';
+import { formatINR, formatDisplayDate, getTodayKolkata } from '../lib/utils/formatters';
 import { Transaction, Account } from '../lib/types';
 import {
   Wallet,
@@ -27,6 +27,8 @@ import {
   Check,
   Building2,
   StickyNote,
+  FileSpreadsheet,
+  FileText,
 } from 'lucide-react';
 import { FinancialTrendChart } from './FinancialTrendChart';
 import { TransactionHistory } from './TransactionHistory';
@@ -36,6 +38,7 @@ import { TransferModal } from './TransferModal';
 import { ReconciliationModal } from './ReconciliationModal';
 import { EditTransactionModal } from './EditTransactionModal';
 import { AddAccountModal } from './AddAccountModal';
+import { MonthlyReportModal } from './MonthlyReportModal';
 import { UpiTeaserCard } from './UpiTeaserCard';
 
 interface DashboardProps {
@@ -62,12 +65,27 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
   // Active view tab
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
 
+  // Listen for external tab navigation requests (e.g. from 48-Hour Notification Center)
+  React.useEffect(() => {
+    const handleTabNav = (e: Event) => {
+      const customEvent = e as CustomEvent<DashboardTab>;
+      if (customEvent.detail) {
+        setActiveTab(customEvent.detail);
+      }
+    };
+    window.addEventListener('sd-navigate-tab', handleTabNav);
+    return () => window.removeEventListener('sd-navigate-tab', handleTabNav);
+  }, []);
+
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addModalType, setAddModalType] = useState<'EXPENSE' | 'INCOME'>('EXPENSE');
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportModalMonth, setReportModalMonth] = useState<string | undefined>();
+  const [dismissedReportBanner, setDismissedReportBanner] = useState<string | null>(null);
   const [reconcileTargetAccountId, setReconcileTargetAccountId] = useState<string | undefined>();
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -124,6 +142,48 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
     accounts.forEach((a) => map.set(a.id, a.display_name));
     return map;
   }, [accounts]);
+
+  // Smart End-of-Month / Start-of-Month detection for monthly report suggestion
+  const todayStr = useMemo(() => getTodayKolkata(), []);
+  const smartReportSuggestion = useMemo(() => {
+    const parts = todayStr.split('-').map(Number);
+    if (parts.length !== 3) return null;
+    const [year, month, day] = parts;
+    const daysInCurrentMonth = new Date(year, month, 0).getDate();
+
+    // End of month: last 4 days of month (day >= daysInCurrentMonth - 3)
+    if (day >= daysInCurrentMonth - 3) {
+      const monthStr = `${year}-${String(month).padStart(2, '0')}`;
+      if (dismissedReportBanner === monthStr) return null;
+      const monthName = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      return {
+        type: 'end_of_month' as const,
+        monthStr,
+        label: monthName,
+        title: `Wrap up ${monthName}'s Ledger`,
+        description: `Month closes in ${daysInCurrentMonth - day + 1} days. Review opening & closing balances, savings rate, and export statements.`,
+      };
+    }
+
+    // Start of month: first 4 days of month (day <= 4)
+    if (day <= 4) {
+      const prevDate = new Date(year, month - 2, 1);
+      const prevYear = prevDate.getFullYear();
+      const prevMonth = prevDate.getMonth() + 1;
+      const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+      if (dismissedReportBanner === prevMonthStr) return null;
+      const prevMonthLabel = prevDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+      return {
+        type: 'start_of_month' as const,
+        monthStr: prevMonthStr,
+        label: prevMonthLabel,
+        title: `${prevMonthLabel} Financial Report is Ready`,
+        description: `Your monthly statement for ${prevMonthLabel} is ready to inspect. View category breakdown, savings rate, and export PDF/CSV.`,
+      };
+    }
+
+    return null;
+  }, [todayStr, dismissedReportBanner]);
 
   return (
     <div className="space-y-5 pb-20 sm:pb-12 text-zinc-900 dark:text-zinc-100 transition-colors duration-200">
@@ -340,46 +400,111 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
       {/* TAB 1: OVERVIEW & GROWW STOCK MARKET CHART */}
       {activeTab === 'overview' && (
         <div className="space-y-5 animate-in fade-in duration-200">
+          {/* SMART END-OF-MONTH FINANCIAL REPORT PROMPT */}
+          {smartReportSuggestion && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold text-zinc-900 dark:text-white">
+                      {smartReportSuggestion.title}
+                    </h4>
+                    <span className="text-[10px] font-semibold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full">
+                      Smart Assistant
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-600 dark:text-zinc-400 mt-0.5">
+                    {smartReportSuggestion.description}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReportModalMonth(smartReportSuggestion.monthStr);
+                    setShowReportModal(true);
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-sm transition-all"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>View Statement</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDismissedReportBanner(smartReportSuggestion.monthStr)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
+                  title="Dismiss suggestion"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* GROWW-STYLE INTERACTIVE FINANCIAL TREND CHART */}
           <FinancialTrendChart
             accounts={accounts}
             transactions={transactions}
           />
 
-          {/* MONTH SUMMARY STATS TILES */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-md dark:shadow-lg">
-              <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                <span>Income This Month</span>
-                <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
-                {formatINR(summary.monthIncome)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-md dark:shadow-lg">
-              <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                <span>Expenses This Month</span>
-                <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-              </div>
-              <p className="text-xl font-bold text-rose-600 dark:text-rose-400 font-mono">
-                {formatINR(summary.monthExpense)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-md dark:shadow-lg">
-              <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
-                <span>Net Monthly Savings</span>
-                <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-              </div>
-              <p
-                className={`text-xl font-bold font-mono ${
-                  summary.monthNetSavings >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                }`}
+          {/* MONTH SUMMARY STATS TILES & STATEMENT TRIGGER */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
+                Month Summary
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setReportModalMonth(undefined);
+                  setShowReportModal(true);
+                }}
+                className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors py-1 px-2.5 rounded-xl border border-emerald-500/25 hover:border-emerald-500/40 bg-emerald-500/5 hover:bg-emerald-500/10"
               >
-                {formatINR(summary.monthNetSavings, true)}
-              </p>
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Monthly Report &amp; Statements</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-md dark:shadow-lg">
+                <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                  <span>Income This Month</span>
+                  <TrendingUp className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                  {formatINR(summary.monthIncome)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-md dark:shadow-lg">
+                <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                  <span>Expenses This Month</span>
+                  <TrendingDown className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                </div>
+                <p className="text-xl font-bold text-rose-600 dark:text-rose-400 font-mono">
+                  {formatINR(summary.monthExpense)}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 shadow-md dark:shadow-lg">
+                <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400 mb-1">
+                  <span>Net Monthly Savings</span>
+                  <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                </div>
+                <p
+                  className={`text-xl font-bold font-mono ${
+                    summary.monthNetSavings >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                  }`}
+                >
+                  {formatINR(summary.monthNetSavings, true)}
+                </p>
+              </div>
             </div>
           </div>
 
@@ -769,7 +894,13 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
       {/* TAB 3: FULL TRANSACTIONS VIEW */}
       {activeTab === 'transactions' && (
         <div className="animate-in fade-in duration-200">
-          <TransactionHistory onEditTransaction={(tx) => setEditingTransaction(tx)} />
+          <TransactionHistory
+            onEditTransaction={(tx) => setEditingTransaction(tx)}
+            onOpenMonthlyReport={() => {
+              setReportModalMonth(undefined);
+              setShowReportModal(true);
+            }}
+          />
         </div>
       )}
 
@@ -948,6 +1079,12 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
       <AddAccountModal
         isOpen={showAddAccountModal}
         onClose={() => setShowAddAccountModal(false)}
+      />
+
+      <MonthlyReportModal
+        isOpen={showReportModal}
+        initialMonth={reportModalMonth}
+        onClose={() => setShowReportModal(false)}
       />
     </div>
   );

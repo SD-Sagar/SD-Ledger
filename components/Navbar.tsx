@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { DEMO_USER_ID } from '../lib/constants';
 import { BrandLogo } from './BrandLogo';
+import { NotificationCenter } from './NotificationCenter';
 
 interface NavbarProps {
   onOpenAuth: (prompt?: string) => void;
@@ -204,6 +205,9 @@ export function Navbar({
                 </div>
               </div>
             )}
+
+            {/* 48-Hour Financial Radar Notifications Center */}
+            <NotificationCenter />
 
             {/* Dark / Light Theme Toggle Button */}
             <button

@@ -7,6 +7,7 @@ import { formatINR, getTodayKolkata } from '../lib/utils/formatters';
 import { RESOLVED_NOTES_RETENTION_DAYS } from '../lib/constants';
 import { AddEditNoteModal } from './AddEditNoteModal';
 import { SettleNoteModal } from './SettleNoteModal';
+import { FinancialCalendar } from './FinancialCalendar';
 import {
   Pin,
   Plus,
@@ -90,6 +91,8 @@ export function FinancialNotesSection() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [noteToEdit, setNoteToEdit] = useState<FinancialNote | null>(null);
   const [noteToSettle, setNoteToSettle] = useState<FinancialNote | null>(null);
+  const [viewMode, setViewMode] = useState<'cards' | 'calendar'>('cards');
+  const [prefilledDueDate, setPrefilledDueDate] = useState<string | undefined>(undefined);
 
   const today = getTodayKolkata();
   const fiveDaysAgoMs = useMemo(() => Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000, []);
@@ -277,8 +280,66 @@ export function FinancialNotesSection() {
         </div>
       </div>
 
-      {/* Toolbar: Filter Tabs & Search */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
+      {/* View Switch: Sticky Notes Cards vs Financial Calendar Schedule */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-200 dark:border-zinc-800">
+        <div className="flex items-center gap-1 p-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl text-xs font-semibold w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              viewMode === 'cards'
+                ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <StickyNote className="w-3.5 h-3.5" />
+            <span>Cards View</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('calendar')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg transition-all ${
+              viewMode === 'calendar'
+                ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+            }`}
+          >
+            <Calendar className="w-3.5 h-3.5" />
+            <span>Financial Calendar</span>
+          </button>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => {
+            setPrefilledDueDate(undefined);
+            setIsAddModalOpen(true);
+          }}
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-all shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>New Note / Due</span>
+        </button>
+      </div>
+
+      {viewMode === 'calendar' ? (
+        <FinancialCalendar
+          notes={notes}
+          onOpenAddNote={(date) => {
+            setPrefilledDueDate(date);
+            setIsAddModalOpen(true);
+          }}
+          onEditNote={(note) => {
+            setNoteToEdit(note);
+            setIsAddModalOpen(true);
+          }}
+          onSettleNote={(note) => setNoteToSettle(note)}
+          onDeleteNote={(id) => deleteNote(id)}
+        />
+      ) : (
+        <>
+          {/* Toolbar: Filter Tabs & Search */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-1">
         {/* Segmented Filter Tabs */}
         <div className="flex items-center gap-1 p-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-xl overflow-x-auto scrollbar-none shadow-xs">
           <button
@@ -582,6 +643,8 @@ export function FinancialNotesSection() {
           })}
         </div>
       )}
+        </>
+      )}
 
       {/* Add / Edit Note Modal */}
       <AddEditNoteModal
@@ -589,8 +652,10 @@ export function FinancialNotesSection() {
         onClose={() => {
           setIsAddModalOpen(false);
           setNoteToEdit(null);
+          setPrefilledDueDate(undefined);
         }}
         noteToEdit={noteToEdit}
+        defaultDueDate={prefilledDueDate}
       />
 
       {/* Settle Note Modal */}

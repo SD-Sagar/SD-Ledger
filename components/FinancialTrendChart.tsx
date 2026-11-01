@@ -1,14 +1,17 @@
 'use client';
 
 import React, { useState, useMemo, useRef, useCallback } from 'react';
-import { Account, Transaction } from '../lib/types';
+import { Account, Transaction, TransactionType } from '../lib/types';
 import { formatINR, formatDisplayDate, getTodayKolkata } from '../lib/utils/formatters';
+import { EXPENSE_CATEGORIES, INCOME_SOURCES } from '../lib/constants';
 import {
   TrendingUp,
   TrendingDown,
   Activity,
   Layers,
   ChevronDown,
+  PieChart,
+  Sparkles,
 } from 'lucide-react';
 
 interface FinancialTrendChartProps {
@@ -40,6 +43,14 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
   const [selectedAccountId, setSelectedAccountId] = useState<string>('ALL');
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>('1M');
   const [hoveredPoint, setHoveredPoint] = useState<ChartPoint | null>(null);
+  const [chartMode, setChartMode] = useState<'trend' | 'donut'>('trend');
+  const [hoveredCategory, setHoveredCategory] = useState<{
+    name: string;
+    amount: number;
+    color: string;
+    count: number;
+    percent: number;
+  } | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -413,6 +424,76 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
     });
   }, [dataPoints, plotWidth, padding.left]);
 
+  // Date range bounds for the selected timeHorizon
+  const horizonStartDateStr = useMemo(() => {
+    const today = parseYMD(todayStr);
+    const startDate = new Date(today);
+    switch (timeHorizon) {
+      case '1W': startDate.setDate(today.getDate() - 7); break;
+      case '1M': startDate.setMonth(today.getMonth() - 1); break;
+      case '3M': startDate.setMonth(today.getMonth() - 3); break;
+      case '6M': startDate.setMonth(today.getMonth() - 6); break;
+      case '1Y': startDate.setFullYear(today.getFullYear() - 1); break;
+      case 'ALL':
+      default:
+        startDate.setMonth(today.getMonth() - 6); break;
+    }
+    return formatYMD(startDate);
+  }, [todayStr, timeHorizon]);
+
+  // Category breakdown calculation (Spending by Category)
+  const categoryData = useMemo(() => {
+    const isIncome = metric === 'CREDIT';
+    const targetType: TransactionType = isIncome ? 'INCOME' : 'EXPENSE';
+    const predefinedList = isIncome ? INCOME_SOURCES : EXPENSE_CATEGORIES;
+    const predefinedMap = new Map<string, { label: string; color: string }>();
+    predefinedList.forEach((c) => {
+      predefinedMap.set(c.label.toLowerCase(), { label: c.label, color: c.color });
+      predefinedMap.set(c.id.toLowerCase(), { label: c.label, color: c.color });
+    });
+
+    const targetAccountIds = selectedAccountId === 'ALL'
+      ? null
+      : new Set([selectedAccountId]);
+
+    const catSums = new Map<string, { name: string; amount: number; color: string; count: number }>();
+    let total = 0;
+
+    transactions.forEach((t) => {
+      if (t.is_deleted || t.type !== targetType) return;
+      if (t.transaction_date < horizonStartDateStr || t.transaction_date > todayStr) return;
+
+      if (targetAccountIds) {
+        const inFrom = t.from_account_id ? targetAccountIds.has(t.from_account_id) : false;
+        const inTo = t.to_account_id ? targetAccountIds.has(t.to_account_id) : false;
+        if (!inFrom && !inTo) return;
+      }
+
+      total += t.amount;
+      const raw = (t.category || '').trim();
+      const match = raw ? predefinedMap.get(raw.toLowerCase()) : null;
+
+      // Rule: if not in already given options, it automatically groups into 'Other / Miscellaneous'
+      const key = match ? match.label : (isIncome ? 'Other Income' : 'Other / Miscellaneous');
+      const color = match ? match.color : '#64748b';
+
+      const existing = catSums.get(key) || { name: key, amount: 0, color, count: 0 };
+      existing.amount += t.amount;
+      existing.count += 1;
+      catSums.set(key, existing);
+    });
+
+    const items = Array.from(catSums.values())
+      .filter((i) => i.amount > 0)
+      .sort((a, b) => b.amount - a.amount)
+      .map((i) => ({
+        ...i,
+        percent: total > 0 ? (i.amount / total) * 100 : 0,
+      }));
+
+    return { items, total, isIncome };
+  }, [transactions, metric, selectedAccountId, horizonStartDateStr, todayStr]);
+
   return (
     <div className="relative overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 sm:p-6 shadow-xl dark:shadow-2xl transition-all">
       {/* BACKGROUND GLOW */}
@@ -427,11 +508,21 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
         {/* BIG VALUE & CHANGE (GROWW STYLE) */}
         <div>
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            <Activity className={`h-4 w-4 ${isThemePositive ? 'text-emerald-500' : 'text-rose-500'}`} />
+            {chartMode === 'donut' ? (
+              <PieChart className={`h-4 w-4 ${categoryData.isIncome ? 'text-emerald-500' : 'text-amber-500'}`} />
+            ) : (
+              <Activity className={`h-4 w-4 ${isThemePositive ? 'text-emerald-500' : 'text-rose-500'}`} />
+            )}
             <span>
-              {metric === 'BALANCE' && 'Total Ledger Balance'}
-              {metric === 'EXPENSE' && 'Total Expenses Over Period'}
-              {metric === 'CREDIT' && 'Total Credits Over Period'}
+              {chartMode === 'donut'
+                ? categoryData.isIncome
+                  ? 'Total Income by Source'
+                  : 'Spending by Category'
+                : metric === 'BALANCE'
+                ? 'Total Ledger Balance'
+                : metric === 'EXPENSE'
+                ? 'Total Expenses Over Period'
+                : 'Total Credits Over Period'}
             </span>
             <span className="rounded bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.5 text-[10px] font-mono text-zinc-500">
               {timeHorizon}
@@ -440,38 +531,54 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
 
           <div className="mt-1.5 flex items-baseline gap-3 flex-wrap">
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight font-mono text-zinc-900 dark:text-white">
-              {formatINR(currentPoint.value)}
+              {chartMode === 'donut' ? formatINR(categoryData.total) : formatINR(currentPoint.value)}
             </h2>
 
-            {/* GROWW-STYLE PERCENT CHANGE */}
-            <div
-              className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold font-mono ${
-                periodChange.isPositive
-                  ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
-                  : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
-              }`}
-            >
-              {periodChange.isPositive ? (
-                <TrendingUp className="h-3.5 w-3.5" />
-              ) : (
-                <TrendingDown className="h-3.5 w-3.5" />
-              )}
-              <span>
-                {periodChange.isPositive ? '+' : ''}
-                {formatINR(periodChange.diff, true)} ({periodChange.isPositive ? '+' : ''}
-                {periodChange.percent}%)
-              </span>
-            </div>
+            {chartMode === 'donut' ? (
+              <div className="flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold font-mono bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-900/60">
+                <Sparkles className="h-3.5 w-3.5" />
+                <span>
+                  {categoryData.items.length} Active {categoryData.items.length === 1 ? 'Category' : 'Categories'}
+                </span>
+              </div>
+            ) : (
+              <div
+                className={`flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold font-mono ${
+                  periodChange.isPositive
+                    ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                    : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
+                }`}
+              >
+                {periodChange.isPositive ? (
+                  <TrendingUp className="h-3.5 w-3.5" />
+                ) : (
+                  <TrendingDown className="h-3.5 w-3.5" />
+                )}
+                <span>
+                  {periodChange.isPositive ? '+' : ''}
+                  {formatINR(periodChange.diff, true)} ({periodChange.isPositive ? '+' : ''}
+                  {periodChange.percent}%)
+                </span>
+              </div>
+            )}
           </div>
 
           {/* ACTIVE DATE INDICATOR */}
           <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
             <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>
-              {hoveredPoint ? (
-                <>Point in Time: <strong className="text-zinc-800 dark:text-zinc-200">{hoveredPoint.displayDate}</strong></>
+              {chartMode === 'donut' ? (
+                <>
+                  Horizon: <strong className="text-zinc-800 dark:text-zinc-200">{horizonStartDateStr} to {todayStr}</strong>
+                </>
+              ) : hoveredPoint ? (
+                <>
+                  Point in Time: <strong className="text-zinc-800 dark:text-zinc-200">{hoveredPoint.displayDate}</strong>
+                </>
               ) : (
-                <>Live Position: <strong className="text-zinc-800 dark:text-zinc-200">Current Today</strong></>
+                <>
+                  Live Position: <strong className="text-zinc-800 dark:text-zinc-200">Current Today</strong>
+                </>
               )}
             </span>
           </p>
@@ -479,19 +586,57 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
 
         {/* METRIC & ACCOUNT TOGGLES */}
         <div className="flex flex-wrap items-center gap-2 self-start md:self-center">
-          {/* METRIC SEGMENTED PILL */}
+          {/* IN-BOX SWITCH: TREND WAVE vs SPENDING BY CATEGORY DONUT */}
           <div className="flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-900 p-1 border border-zinc-200 dark:border-zinc-800 text-xs font-semibold">
             <button
               type="button"
-              onClick={() => setMetric('BALANCE')}
-              className={`rounded-lg px-2.5 py-1 transition-all ${
-                metric === 'BALANCE'
+              onClick={() => {
+                setChartMode('trend');
+                if (metric !== 'BALANCE' && metric !== 'EXPENSE' && metric !== 'CREDIT') setMetric('BALANCE');
+              }}
+              title="Switch to Trend Wave Chart"
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all ${
+                chartMode === 'trend'
                   ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              Balance
+              <TrendingUp className="h-3.5 w-3.5" />
+              <span>Trend</span>
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setChartMode('donut');
+                if (metric === 'BALANCE') setMetric('EXPENSE');
+              }}
+              title="Switch to Spending by Category Donut"
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all ${
+                chartMode === 'donut'
+                  ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+              }`}
+            >
+              <PieChart className="h-3.5 w-3.5" />
+              <span>Categories</span>
+            </button>
+          </div>
+
+          {/* METRIC SEGMENTED PILL */}
+          <div className="flex items-center rounded-xl bg-zinc-100 dark:bg-zinc-900 p-1 border border-zinc-200 dark:border-zinc-800 text-xs font-semibold">
+            {chartMode === 'trend' && (
+              <button
+                type="button"
+                onClick={() => setMetric('BALANCE')}
+                className={`rounded-lg px-2.5 py-1 transition-all ${
+                  metric === 'BALANCE'
+                    ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
+                }`}
+              >
+                Balance
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setMetric('EXPENSE')}
@@ -512,7 +657,7 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
                   : 'text-zinc-500 hover:text-zinc-900 dark:hover:text-white'
               }`}
             >
-              Credits
+              {chartMode === 'donut' ? 'Income' : 'Credits'}
             </button>
           </div>
 
@@ -535,9 +680,145 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
         </div>
       </div>
 
-      {/* INTERACTIVE SVG CHART AREA */}
-      <div
-        ref={containerRef}
+      {/* VIEW: DONUT CHART OR TREND WAVE */}
+      {chartMode === 'donut' ? (
+        <div className="mt-4 flex flex-col md:flex-row items-center justify-between gap-6 py-2 min-h-[230px]">
+          {categoryData.items.length === 0 ? (
+            <div className="w-full flex flex-col items-center justify-center py-10 text-center text-zinc-400">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 mb-3 text-zinc-500">
+                <PieChart className="h-6 w-6" />
+              </div>
+              <p className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+                No {categoryData.isIncome ? 'income' : 'expenses'} found in this period
+              </p>
+              <p className="text-xs text-zinc-400 mt-1 max-w-xs">
+                Log a transaction or change the time horizon pills below to see category breakdowns.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Donut Graphic with Interactive Center Hole */}
+              <div className="relative shrink-0 flex items-center justify-center">
+                <svg
+                  viewBox="0 0 200 200"
+                  className="h-52 w-52 sm:h-56 sm:w-56 overflow-visible -rotate-90 select-none"
+                >
+                  {/* Background Track */}
+                  <circle
+                    cx="100"
+                    cy="100"
+                    r="68"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="24"
+                    className="text-zinc-100 dark:text-zinc-900/60"
+                  />
+
+                  {/* Slices */}
+                  {(() => {
+                    const C = 2 * Math.PI * 68;
+                    let accum = 0;
+                    return categoryData.items.map((cat, idx) => {
+                      const sliceLen = Math.max(1, (cat.percent / 100) * C - (categoryData.items.length > 1 ? 3 : 0));
+                      const offset = -accum;
+                      accum += (cat.percent / 100) * C;
+                      const isHovered = hoveredCategory?.name === cat.name;
+
+                      return (
+                        <circle
+                          key={idx}
+                          cx="100"
+                          cy="100"
+                          r="68"
+                          fill="none"
+                          stroke={cat.color}
+                          strokeWidth={isHovered ? 29 : 24}
+                          strokeDasharray={`${sliceLen} ${C - sliceLen}`}
+                          strokeDashoffset={offset}
+                          strokeLinecap="round"
+                          onMouseEnter={() => setHoveredCategory(cat)}
+                          onMouseLeave={() => setHoveredCategory(null)}
+                          className="cursor-pointer transition-all duration-200 hover:opacity-90"
+                        />
+                      );
+                    });
+                  })()}
+                </svg>
+
+                {/* Center Content */}
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center p-3">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400 truncate max-w-[120px]">
+                    {hoveredCategory ? hoveredCategory.name : categoryData.isIncome ? 'Total Income' : 'Total Spent'}
+                  </span>
+                  <span className="mt-0.5 text-base sm:text-lg font-extrabold font-mono text-zinc-900 dark:text-white">
+                    {formatINR(hoveredCategory ? hoveredCategory.amount : categoryData.total)}
+                  </span>
+                  <span className="text-[10px] font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                    {hoveredCategory
+                      ? `${hoveredCategory.percent.toFixed(1)}% of total`
+                      : `${categoryData.items.length} ${categoryData.items.length === 1 ? 'Category' : 'Categories'}`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Category Breakdown List with Progress Bars (Image 1 Style) */}
+              <div className="w-full flex-1 space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                {categoryData.items.map((cat, idx) => {
+                  const isHovered = hoveredCategory?.name === cat.name;
+                  return (
+                    <div
+                      key={idx}
+                      onMouseEnter={() => setHoveredCategory(cat)}
+                      onMouseLeave={() => setHoveredCategory(null)}
+                      className={`group cursor-pointer rounded-2xl border p-2.5 transition-all ${
+                        isHovered
+                          ? 'border-emerald-500/40 bg-zinc-50 dark:bg-zinc-900 shadow-sm'
+                          : 'border-zinc-100 dark:border-zinc-800/80 hover:bg-zinc-50/60 dark:hover:bg-zinc-900/40'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="h-2.5 w-2.5 shrink-0 rounded-full"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="font-semibold text-zinc-900 dark:text-zinc-100 truncate">
+                            {cat.name}
+                          </span>
+                          <span className="text-[10px] font-mono text-zinc-400">
+                            ({cat.count})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0 font-mono">
+                          <span className="font-bold text-zinc-900 dark:text-white">
+                            {formatINR(cat.amount)}
+                          </span>
+                          <span className="rounded-md bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[10px] font-bold text-zinc-600 dark:text-zinc-300">
+                            {cat.percent.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Mini visual proportion bar */}
+                      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.max(2, cat.percent)}%`,
+                            backgroundColor: cat.color,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      ) : (
+        <div
+          ref={containerRef}
         onMouseMove={onMouseMove}
         onTouchMove={onTouchMove}
         onMouseLeave={onPointerLeave}
@@ -740,6 +1021,7 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
           </div>
         )}
       </div>
+      )}
 
       {/* BOTTOM CONTROLS: STATS STRIP & TIME HORIZON PILLS */}
       <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-t border-zinc-100 dark:border-zinc-800/80 pt-3">

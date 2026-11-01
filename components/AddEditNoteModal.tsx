@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { FinancialNote, NoteType, NoteColor } from '../lib/types';
+import { formatDisplayDate } from '../lib/utils/formatters';
 import {
   X,
   Pin,
@@ -10,12 +11,15 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   StickyNote,
+  Lock,
+  Calendar,
 } from 'lucide-react';
 
 interface AddEditNoteModalProps {
   isOpen: boolean;
   onClose: () => void;
   noteToEdit?: FinancialNote | null;
+  defaultDueDate?: string;
 }
 
 const COLOR_OPTIONS: { id: NoteColor; label: string; bg: string; border: string; dot: string }[] = [
@@ -27,7 +31,7 @@ const COLOR_OPTIONS: { id: NoteColor; label: string; bg: string; border: string;
   { id: 'slate', label: 'Charcoal Slate', bg: 'bg-zinc-500/10 dark:bg-zinc-500/20', border: 'border-zinc-400/50', dot: 'bg-zinc-400' },
 ];
 
-export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteModalProps) {
+export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }: AddEditNoteModalProps) {
   const { addNote, updateNote } = useLedger();
 
   const [title, setTitle] = useState('');
@@ -40,6 +44,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDateLocked, setIsDateLocked] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -51,18 +56,21 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
         setDueDate(noteToEdit.due_date || '');
         setCardColor(noteToEdit.card_color || 'yellow');
         setIsPinned(!!noteToEdit.is_pinned);
+        setIsDateLocked(false);
       } else {
         setTitle('');
         setDescription('');
         setType('THEY_OWE_ME');
         setAmount('');
-        setDueDate('');
+        const initialDate = defaultDueDate || '';
+        setDueDate(initialDate);
         setCardColor('yellow');
         setIsPinned(false);
+        setIsDateLocked(Boolean(defaultDueDate));
       }
       setError(null);
     }
-  }, [isOpen, noteToEdit]);
+  }, [isOpen, noteToEdit, defaultDueDate]);
 
   if (!isOpen) return null;
 
@@ -172,6 +180,25 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
             </div>
           )}
 
+          {/* Calendar Date Captured & Locked Banner */}
+          {isDateLocked && dueDate && (
+            <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-900 dark:text-emerald-200 shadow-2xs">
+              <span className="flex items-center gap-2 font-medium">
+                <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <span>Scheduling on: <strong className="font-bold underline decoration-emerald-500/50">{formatDisplayDate(dueDate)}</strong></span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsDateLocked(false)}
+                className="flex items-center gap-1 text-[11px] bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/30 px-2 py-0.5 rounded-full font-bold transition-colors"
+                title="Click to unlock and select a different date"
+              >
+                <Lock className="w-2.5 h-2.5" />
+                <span>Locked &bull; Change</span>
+              </button>
+            </div>
+          )}
+
           {/* Type Selector Tabs */}
           <div>
             <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
@@ -262,18 +289,42 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit }: AddEditNoteMod
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                Due Date / Target Date (Optional)
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
+                  <span>Due Date / Target Date</span>
+                  {type === 'REMINDER' && <span className="text-zinc-400 font-normal">(Optional)</span>}
+                </label>
+                {isDateLocked && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDateLocked(false)}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                  >
+                    <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                    <span>Locked (Click to change)</span>
+                  </button>
+                )}
+              </div>
               <div className="relative">
                 <input
                   type="date"
                   value={dueDate}
                   onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-2.5 px-3.5 text-sm text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  disabled={isDateLocked}
+                  className={`w-full rounded-xl border py-2.5 px-3.5 text-sm transition-colors ${
+                    isDateLocked
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100 font-semibold cursor-not-allowed opacity-90'
+                      : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500'
+                  }`}
                   style={{ colorScheme: 'light dark' }}
                 />
               </div>
+              {isDateLocked && dueDate && (
+                <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                  <Lock className="w-3 h-3 shrink-0" />
+                  <span>Captured from calendar selection ({formatDisplayDate(dueDate)})</span>
+                </p>
+              )}
             </div>
           </div>
 
