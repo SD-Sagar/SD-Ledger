@@ -116,10 +116,16 @@ export function WhatsAppNudgeModal({
     return { friendName: finalFriendName, noteReason: reason };
   }, [note]);
 
-  // Build a memory book of friend contacts across existing notes & local storage
+  // Build a memory book of friend contacts across saved contacts & notes
   const savedContacts = useMemo(() => {
     const map = new Map<string, string>();
-    // 1. From all ledger notes
+    // 1. From saved contacts directory (authoritative)
+    getSavedContacts().forEach((c) => {
+      if (c.name?.trim() && c.phone?.trim()) {
+        map.set(c.name.trim().toLowerCase(), c.phone.trim());
+      }
+    });
+    // 2. From all ledger notes (fallback)
     notes.forEach((n) => {
       if (n.phone_number?.trim()) {
         const nameKey = n.title.split(/[-–—:(]/)[0].trim().toLowerCase();
@@ -128,24 +134,8 @@ export function WhatsAppNudgeModal({
         }
       }
     });
-    // 2. From saved contacts directory in localStorage
-    if (typeof window !== 'undefined') {
-      try {
-        const stored = localStorage.getItem('sd_contacts_book');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          Object.entries(parsed).forEach(([k, v]) => {
-            if (typeof v === 'string' && v.trim() && !map.has(k.toLowerCase())) {
-              map.set(k.toLowerCase(), v.trim());
-            }
-          });
-        }
-      } catch {
-        // ignore
-      }
-    }
     return map;
-  }, [notes]);
+  }, [notes, savedContactsList]);
 
   const suggestedPhone = useMemo(() => {
     if (!friendName || friendName === 'Friend') return null;

@@ -451,15 +451,36 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
           // Automatically pull cloud contacts & UPI settings into local state for this device
           try {
             await pullContactsFromSupabase(uid);
+
+            let pulledUpi = '';
+            let pulledPayee = 'Sagar Dey';
+
+            // Check session user_metadata first (instant cloud sync across origins)
+            const { data: authSessionData } = await supabase.auth.getSession();
+            const sessionUserMeta = authSessionData?.session?.user?.user_metadata;
+            if (sessionUserMeta?.upi_id) {
+              pulledUpi = sessionUserMeta.upi_id;
+              if (sessionUserMeta.payee_name) pulledPayee = sessionUserMeta.payee_name;
+            }
+
+            // Also query user_profiles table in Supabase
             const { data: profile } = await supabase
               .from('user_profiles')
               .select('upi_id, full_name')
               .eq('id', uid)
               .maybeSingle();
+
             if (profile?.upi_id) {
+              pulledUpi = profile.upi_id;
+            }
+            if (profile?.full_name) {
+              pulledPayee = profile.full_name;
+            }
+
+            if (pulledUpi) {
               saveStoredUpiSettings({
-                upiId: profile.upi_id,
-                payeeName: profile.full_name || 'Sagar Dey',
+                upiId: pulledUpi,
+                payeeName: pulledPayee || 'Sagar Dey',
               });
             }
           } catch (profileErr) {
@@ -616,15 +637,34 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             // Pull contacts & UPI for linked cloud user
             try {
               await pullContactsFromSupabase(linkedUid);
+
+              let pulledUpi = '';
+              let pulledPayee = 'Sagar Dey';
+
+              const { data: authSessionData } = await supabase.auth.getSession();
+              const sessionUserMeta = authSessionData?.session?.user?.user_metadata;
+              if (sessionUserMeta?.upi_id) {
+                pulledUpi = sessionUserMeta.upi_id;
+                if (sessionUserMeta.payee_name) pulledPayee = sessionUserMeta.payee_name;
+              }
+
               const { data: profile } = await supabase
                 .from('user_profiles')
                 .select('upi_id, full_name')
                 .eq('id', linkedUid)
                 .maybeSingle();
+
               if (profile?.upi_id) {
+                pulledUpi = profile.upi_id;
+              }
+              if (profile?.full_name) {
+                pulledPayee = profile.full_name;
+              }
+
+              if (pulledUpi) {
                 saveStoredUpiSettings({
-                  upiId: profile.upi_id,
-                  payeeName: profile.full_name || 'Sagar Dey',
+                  upiId: pulledUpi,
+                  payeeName: pulledPayee || 'Sagar Dey',
                 });
               }
             } catch {
@@ -863,16 +903,41 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }, 'upsert');
       }
 
-      // 7. Sync UPI Settings to cloud user_profiles
+      // 7. Sync UPI Settings to cloud user_profiles & auth metadata
       try {
         const upiSettings = getStoredUpiSettings();
         if (upiSettings.upiId) {
-          await supabase.from('user_profiles').upsert({
-            id: effectiveUid,
-            full_name: upiSettings.payeeName,
-            upi_id: upiSettings.upiId,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
+          // Direct update to user_profiles avoids not-null email constraint
+          const { error: profileErr } = await supabase
+            .from('user_profiles')
+            .update({
+              full_name: upiSettings.payeeName,
+              upi_id: upiSettings.upiId,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', effectiveUid);
+
+          if (profileErr) {
+            const userEmail = session?.user?.email || (user?.email || '');
+            await supabase.from('user_profiles').upsert(
+              {
+                id: effectiveUid,
+                email: userEmail,
+                full_name: upiSettings.payeeName,
+                upi_id: upiSettings.upiId,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+          }
+
+          // Also persist in auth user_metadata for 100% cloud resilience across all origins
+          await supabase.auth.updateUser({
+            data: {
+              upi_id: upiSettings.upiId,
+              payee_name: upiSettings.payeeName,
+            },
+          }).catch(console.warn);
         }
       } catch (upiErr) {
         console.warn('Could not sync UPI settings to cloud in pushLocalDataToCloud:', upiErr);
@@ -947,16 +1012,38 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       }
       await refreshData(DEMO_USER_ID);
 
-      // Sync latest UPI settings to cloud user_profiles
+      // Sync latest UPI settings to cloud user_profiles & auth metadata
       try {
         const upiSettings = getStoredUpiSettings();
         if (upiSettings.upiId && supabase) {
-          await supabase.from('user_profiles').upsert({
-            id: targetUid,
-            full_name: upiSettings.payeeName,
-            upi_id: upiSettings.upiId,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'id' });
+          const { error: upErr } = await supabase
+            .from('user_profiles')
+            .update({
+              full_name: upiSettings.payeeName,
+              upi_id: upiSettings.upiId,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', targetUid);
+
+          if (upErr) {
+            await supabase.from('user_profiles').upsert(
+              {
+                id: targetUid,
+                email: session.user.email || '',
+                full_name: upiSettings.payeeName,
+                upi_id: upiSettings.upiId,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'id' }
+            );
+          }
+
+          await supabase.auth.updateUser({
+            data: {
+              upi_id: upiSettings.upiId,
+              payee_name: upiSettings.payeeName,
+            },
+          }).catch(console.warn);
         }
       } catch (upiErr) {
         console.warn('Could not sync UPI settings in uploadOfflineToCloud:', upiErr);

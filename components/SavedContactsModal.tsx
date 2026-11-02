@@ -25,6 +25,7 @@ import {
   deleteSavedContact,
   updateSavedContact,
   pushContactsToSupabase,
+  pullContactsFromSupabase,
   deleteContactFromSupabase,
 } from '../lib/utils/contacts';
 
@@ -64,8 +65,15 @@ export function SavedContactsModal({
       setIsAdding(false);
       setEditingId(null);
       setFormError(null);
+
+      // Auto-pull fresh cloud contacts from Supabase when opening directory
+      if (effectiveUid && navigator.onLine) {
+        pullContactsFromSupabase(effectiveUid)
+          .then((updated) => setContacts(updated))
+          .catch(console.warn);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, effectiveUid]);
 
   // Listen for contacts updates from other components
   useEffect(() => {

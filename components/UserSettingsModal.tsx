@@ -43,23 +43,37 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       setSaveSuccess(false);
       setHasCopied(false);
 
-      // If local UPI ID is not set yet, attempt to fetch from user_profiles table in Supabase
+      // If local UPI ID is not set yet, attempt to fetch from user_profiles table or auth metadata
       const fetchCloudUpi = async () => {
         const supabase = getSupabase();
         const effectiveUid = user && user.id !== DEMO_USER_ID ? user.id : linkedCloudUserId;
         if (supabase && effectiveUid && !stored.upiId && navigator.onLine) {
           try {
+            let foundUpi = '';
+            let foundPayee = '';
+
+            const { data: sessionData } = await supabase.auth.getSession();
+            const meta = sessionData?.session?.user?.user_metadata;
+            if (meta?.upi_id) {
+              foundUpi = meta.upi_id;
+              if (meta.payee_name) foundPayee = meta.payee_name;
+            }
+
             const { data } = await supabase
               .from('user_profiles')
               .select('upi_id, full_name')
               .eq('id', effectiveUid)
               .maybeSingle();
-            if (data?.upi_id) {
-              setUpiId(data.upi_id);
-              if (data.full_name) setPayeeName(data.full_name);
+
+            if (data?.upi_id) foundUpi = data.upi_id;
+            if (data?.full_name) foundPayee = data.full_name;
+
+            if (foundUpi) {
+              setUpiId(foundUpi);
+              if (foundPayee) setPayeeName(foundPayee);
               saveStoredUpiSettings({
-                upiId: data.upi_id,
-                payeeName: data.full_name || stored.payeeName || 'Sagar Dey',
+                upiId: foundUpi,
+                payeeName: foundPayee || stored.payeeName || 'Sagar Dey',
               });
             }
           } catch {
@@ -121,18 +135,39 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       upiId: cleanUpi,
     });
 
-    // 2. Persist to Supabase database (user_profiles) if authenticated
+    // 2. Persist to Supabase database (user_profiles & auth metadata) if authenticated
     const supabase = getSupabase();
     const effectiveUid = user && user.id !== DEMO_USER_ID ? user.id : linkedCloudUserId;
     if (supabase && effectiveUid && navigator.onLine) {
       try {
-        await supabase.from('user_profiles').upsert({
-          id: effectiveUid,
-          email: user?.email || '',
-          full_name: cleanPayee,
-          upi_id: cleanUpi,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'id' });
+        const { error: upErr } = await supabase
+          .from('user_profiles')
+          .update({
+            full_name: cleanPayee,
+            upi_id: cleanUpi,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', effectiveUid);
+
+        if (upErr) {
+          await supabase.from('user_profiles').upsert(
+            {
+              id: effectiveUid,
+              email: user?.email || '',
+              full_name: cleanPayee,
+              upi_id: cleanUpi,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'id' }
+          );
+        }
+
+        await supabase.auth.updateUser({
+          data: {
+            upi_id: cleanUpi,
+            payee_name: cleanPayee,
+          },
+        }).catch(console.warn);
       } catch (dbErr) {
         console.warn('Could not update UPI in user_profiles database:', dbErr);
       }

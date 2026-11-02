@@ -41,36 +41,63 @@ export function saveOrUpdateContact(name: string, phone: string): SavedContact |
   if (!trimmedName || !digits) return null;
 
   const current = getSavedContacts();
-  const lowerName = trimmedName.toLowerCase();
   const nowIso = new Date().toISOString();
 
-  const existingIdx = current.findIndex((c) => c.name.toLowerCase() === lowerName || cleanDigits(c.phone) === digits);
+  // 1. Check if contact already exists by exact phone digits
+  const existingByPhoneIdx = current.findIndex((c) => cleanDigits(c.phone) === digits);
 
-  let updatedList: SavedContact[];
-  let resultContact: SavedContact;
+  if (existingByPhoneIdx >= 0) {
+    const existing = current[existingByPhoneIdx];
+    // CRITICAL: NEVER overwrite an existing friend's name (e.g. "Munshi") with an arbitrary note title (e.g. "rar" or "Dinner share")!
+    // Only update name if existing was empty or a generic placeholder.
+    const isGenericPlaceholder =
+      !existing.name ||
+      existing.name.toLowerCase() === 'friend' ||
+      existing.name.toLowerCase() === 'unknown' ||
+      existing.name.toLowerCase() === 'null';
 
-  if (existingIdx >= 0) {
-    const existing = current[existingIdx];
-    resultContact = {
+    const preservedName = isGenericPlaceholder ? trimmedName : existing.name;
+
+    const resultContact: SavedContact = {
       ...existing,
-      name: trimmedName, // update with latest casing
+      name: preservedName,
       phone: digits,
       updated_at: nowIso,
     };
-    updatedList = [...current];
-    updatedList[existingIdx] = resultContact;
-  } else {
-    resultContact = {
-      id: `contact_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      name: trimmedName,
-      phone: digits,
-      created_at: nowIso,
-      updated_at: nowIso,
-    };
-    updatedList = [resultContact, ...current];
+    const updatedList = [...current];
+    updatedList[existingByPhoneIdx] = resultContact;
+    setSavedContacts(updatedList);
+    return resultContact;
   }
 
-  setSavedContacts(updatedList);
+  // 2. Check if contact exists by name (exact match)
+  const existingByNameIdx = current.findIndex(
+    (c) => c.name.toLowerCase() === trimmedName.toLowerCase()
+  );
+
+  if (existingByNameIdx >= 0) {
+    const existing = current[existingByNameIdx];
+    const resultContact: SavedContact = {
+      ...existing,
+      name: trimmedName,
+      phone: digits,
+      updated_at: nowIso,
+    };
+    const updatedList = [...current];
+    updatedList[existingByNameIdx] = resultContact;
+    setSavedContacts(updatedList);
+    return resultContact;
+  }
+
+  // 3. Brand new contact
+  const resultContact: SavedContact = {
+    id: `contact_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    name: trimmedName,
+    phone: digits,
+    created_at: nowIso,
+    updated_at: nowIso,
+  };
+  setSavedContacts([resultContact, ...current]);
   return resultContact;
 }
 
@@ -137,7 +164,7 @@ export function seedContactsFromNotes(notes: FinancialNote[]): void {
 }
 
 /**
- * Push all saved contacts from localStorage into Supabase cloud (user_contacts table & user_profiles.saved_contacts)
+ * Push all saved contacts from localStorage into Supabase cloud (user_contacts table, user_profiles, & auth metadata)
  */
 export async function pushContactsToSupabase(userId: string): Promise<void> {
   const supabase = getSupabase();
@@ -148,28 +175,56 @@ export async function pushContactsToSupabase(userId: string): Promise<void> {
   // 1. Upsert into public.user_contacts table
   try {
     for (const c of contacts) {
-      await supabase.from('user_contacts').upsert({
-        id: c.id,
-        user_id: userId,
-        name: c.name,
-        phone: c.phone,
-        created_at: c.created_at || new Date().toISOString(),
-        updated_at: c.updated_at || new Date().toISOString(),
-      }, { onConflict: 'id' });
+      await supabase.from('user_contacts').upsert(
+        {
+          id: c.id,
+          user_id: userId,
+          name: c.name,
+          phone: cleanDigits(c.phone),
+          created_at: c.created_at || new Date().toISOString(),
+          updated_at: c.updated_at || new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
     }
   } catch (err) {
     console.warn('Could not upsert into user_contacts table:', err);
   }
 
-  // 2. Also save into user_profiles.saved_contacts as resilience fallback
+  // 2. Also save into user_profiles.saved_contacts via UPDATE to avoid not-null email constraint
   try {
-    await supabase.from('user_profiles').upsert({
-      id: userId,
-      saved_contacts: contacts,
-      updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    const { error: upErr } = await supabase
+      .from('user_profiles')
+      .update({
+        saved_contacts: contacts,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId);
+
+    if (upErr) {
+      // Fallback
+      await supabase.from('user_profiles').upsert(
+        {
+          id: userId,
+          saved_contacts: contacts,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'id' }
+      );
+    }
   } catch (err) {
     console.warn('Could not save contacts to user_profiles:', err);
+  }
+
+  // 3. Persist to auth user_metadata for 100% cloud resilience across all origins
+  try {
+    await supabase.auth.updateUser({
+      data: {
+        saved_contacts: contacts,
+      },
+    });
+  } catch {
+    // non-blocking
   }
 }
 
@@ -182,7 +237,7 @@ export async function pullContactsFromSupabase(userId: string): Promise<SavedCon
 
   let remoteContacts: SavedContact[] = [];
 
-  // Try user_contacts table first
+  // 1. Try user_contacts table first
   try {
     const { data, error } = await supabase
       .from('user_contacts')
@@ -192,7 +247,7 @@ export async function pullContactsFromSupabase(userId: string): Promise<SavedCon
       remoteContacts = data.map((d) => ({
         id: d.id,
         name: d.name,
-        phone: d.phone,
+        phone: cleanDigits(d.phone),
         created_at: d.created_at,
         updated_at: d.updated_at,
       }));
@@ -201,7 +256,7 @@ export async function pullContactsFromSupabase(userId: string): Promise<SavedCon
     // non-blocking
   }
 
-  // Fallback to user_profiles.saved_contacts
+  // 2. Fallback to user_profiles.saved_contacts
   if (remoteContacts.length === 0) {
     try {
       const { data, error } = await supabase
@@ -210,7 +265,25 @@ export async function pullContactsFromSupabase(userId: string): Promise<SavedCon
         .eq('id', userId)
         .maybeSingle();
       if (!error && data?.saved_contacts && Array.isArray(data.saved_contacts)) {
-        remoteContacts = data.saved_contacts;
+        remoteContacts = data.saved_contacts.map((c: SavedContact) => ({
+          ...c,
+          phone: cleanDigits(c.phone),
+        }));
+      }
+    } catch {
+      // non-blocking
+    }
+  }
+
+  // 3. Fallback to auth user_metadata.saved_contacts
+  if (remoteContacts.length === 0) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user?.user_metadata?.saved_contacts && Array.isArray(user.user_metadata.saved_contacts)) {
+        remoteContacts = user.user_metadata.saved_contacts.map((c: SavedContact) => ({
+          ...c,
+          phone: cleanDigits(c.phone),
+        }));
       }
     } catch {
       // non-blocking
@@ -220,10 +293,22 @@ export async function pullContactsFromSupabase(userId: string): Promise<SavedCon
   if (remoteContacts.length > 0) {
     const local = getSavedContacts();
     const map = new Map<string, SavedContact>();
-    remoteContacts.forEach((c) => map.set(c.phone, c));
-    local.forEach((c) => {
-      if (!map.has(c.phone)) map.set(c.phone, c);
+
+    // Remote contacts from Supabase are the true authoritative source:
+    // They are inserted first so they take priority over stale local test data!
+    remoteContacts.forEach((c) => {
+      const key = cleanDigits(c.phone);
+      if (key) map.set(key, c);
     });
+
+    // Add any unique local contacts that aren't in remote yet
+    local.forEach((c) => {
+      const key = cleanDigits(c.phone);
+      if (key && !map.has(key)) {
+        map.set(key, c);
+      }
+    });
+
     const merged = Array.from(map.values());
     setSavedContacts(merged);
     return merged;
@@ -246,11 +331,14 @@ export async function deleteContactFromSupabase(userId: string, contactId: strin
 
   try {
     const remaining = getSavedContacts();
-    await supabase.from('user_profiles').upsert({
-      id: userId,
+    await supabase.from('user_profiles').update({
       saved_contacts: remaining,
       updated_at: new Date().toISOString(),
-    }, { onConflict: 'id' });
+    }).eq('id', userId);
+
+    await supabase.auth.updateUser({
+      data: { saved_contacts: remaining },
+    });
   } catch (err) {
     console.warn('Could not update saved_contacts on user_profiles after delete:', err);
   }
