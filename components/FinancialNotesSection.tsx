@@ -1,14 +1,16 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
-import { FinancialNote } from '../lib/types';
+import { FinancialNote, SavedContact } from '../lib/types';
 import { formatINR, getTodayKolkata } from '../lib/utils/formatters';
 import { RESOLVED_NOTES_RETENTION_DAYS } from '../lib/constants';
+import { getSavedContacts, seedContactsFromNotes } from '../lib/utils/contacts';
 import { AddEditNoteModal } from './AddEditNoteModal';
 import { SettleNoteModal } from './SettleNoteModal';
 import { FinancialCalendar } from './FinancialCalendar';
 import { WhatsAppNudgeModal } from './WhatsAppNudgeModal';
+import { SavedContactsModal } from './SavedContactsModal';
 import {
   Pin,
   Plus,
@@ -27,6 +29,7 @@ import {
   Layers,
   Sparkles,
   Clock,
+  BookUser,
 } from 'lucide-react';
 
 type FilterTab = 'active' | 'THEY_OWE_ME' | 'I_OWE_THEM' | 'REMINDER' | 'resolved';
@@ -96,6 +99,17 @@ export function FinancialNotesSection() {
   const [noteForWhatsApp, setNoteForWhatsApp] = useState<FinancialNote | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'calendar'>('cards');
   const [prefilledDueDate, setPrefilledDueDate] = useState<string | undefined>(undefined);
+  const [prefilledContact, setPrefilledContact] = useState<SavedContact | null>(null);
+  const [isContactsModalOpen, setIsContactsModalOpen] = useState(false);
+  const [savedContactsCount, setSavedContactsCount] = useState(0);
+
+  useEffect(() => {
+    seedContactsFromNotes(notes);
+    setSavedContactsCount(getSavedContacts().length);
+    const onUpdate = () => setSavedContactsCount(getSavedContacts().length);
+    window.addEventListener('sd-contacts-updated', onUpdate);
+    return () => window.removeEventListener('sd-contacts-updated', onUpdate);
+  }, [notes]);
 
   const today = getTodayKolkata();
   const fiveDaysAgoMs = useMemo(() => Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000, []);
@@ -314,20 +328,38 @@ export function FinancialNotesSection() {
           </button>
         </div>
 
-        {viewMode === 'cards' && (
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             type="button"
-            onClick={() => {
-              setPrefilledDueDate(undefined);
-              setNoteToEdit(null);
-              setIsAddModalOpen(true);
-            }}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-all shrink-0 w-full sm:w-auto"
+            onClick={() => setIsContactsModalOpen(true)}
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3 py-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 hover:border-emerald-500/50 hover:text-emerald-600 dark:hover:text-emerald-400 text-zinc-700 dark:text-zinc-300 text-xs font-semibold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
+            title="Manage saved friend contacts & WhatsApp directory"
           >
-            <Plus className="w-3.5 h-3.5" />
-            <span>New Note / Due</span>
+            <BookUser className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span>Saved Contacts</span>
+            {savedContactsCount > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold">
+                {savedContactsCount}
+              </span>
+            )}
           </button>
-        )}
+
+          {viewMode === 'cards' && (
+            <button
+              type="button"
+              onClick={() => {
+                setPrefilledDueDate(undefined);
+                setPrefilledContact(null);
+                setNoteToEdit(null);
+                setIsAddModalOpen(true);
+              }}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-all shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>New Note / Due</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {viewMode === 'calendar' ? (
@@ -697,9 +729,11 @@ export function FinancialNotesSection() {
           setIsAddModalOpen(false);
           setNoteToEdit(null);
           setPrefilledDueDate(undefined);
+          setPrefilledContact(null);
         }}
         noteToEdit={noteToEdit}
         defaultDueDate={prefilledDueDate}
+        prefilledContact={prefilledContact}
       />
 
       {/* Settle Note Modal */}
@@ -716,6 +750,18 @@ export function FinancialNotesSection() {
         note={noteForWhatsApp}
         onOpenSettings={() => {
           window.dispatchEvent(new CustomEvent('sd-open-settings'));
+        }}
+      />
+
+      {/* Saved Contacts Directory Modal */}
+      <SavedContactsModal
+        isOpen={isContactsModalOpen}
+        onClose={() => setIsContactsModalOpen(false)}
+        onSelectContactForNote={(contact) => {
+          setNoteToEdit(null);
+          setPrefilledDueDate(undefined);
+          setPrefilledContact(contact);
+          setIsAddModalOpen(true);
         }}
       />
     </div>

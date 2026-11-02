@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
-import { FinancialNote, NoteType, NoteColor } from '../lib/types';
+import { FinancialNote, NoteType, NoteColor, SavedContact } from '../lib/types';
 import { formatDisplayDate } from '../lib/utils/formatters';
+import { getSavedContacts, saveOrUpdateContact } from '../lib/utils/contacts';
 import {
   X,
   Pin,
@@ -14,6 +15,7 @@ import {
   Lock,
   Calendar,
   Phone,
+  BookUser,
 } from 'lucide-react';
 
 interface AddEditNoteModalProps {
@@ -21,6 +23,7 @@ interface AddEditNoteModalProps {
   onClose: () => void;
   noteToEdit?: FinancialNote | null;
   defaultDueDate?: string;
+  prefilledContact?: SavedContact | null;
 }
 
 const COLOR_OPTIONS: { id: NoteColor; label: string; bg: string; border: string; dot: string }[] = [
@@ -32,7 +35,13 @@ const COLOR_OPTIONS: { id: NoteColor; label: string; bg: string; border: string;
   { id: 'slate', label: 'Charcoal Slate', bg: 'bg-zinc-500/10 dark:bg-zinc-500/20', border: 'border-zinc-400/50', dot: 'bg-zinc-400' },
 ];
 
-export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }: AddEditNoteModalProps) {
+export function AddEditNoteModal({
+  isOpen,
+  onClose,
+  noteToEdit,
+  defaultDueDate,
+  prefilledContact,
+}: AddEditNoteModalProps) {
   const { addNote, updateNote } = useLedger();
 
   const [title, setTitle] = useState('');
@@ -48,6 +57,23 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
   const [error, setError] = useState<string | null>(null);
   const [isDateLocked, setIsDateLocked] = useState(false);
 
+  // Saved contacts and native contact picker support
+  const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
+  const [hasContactPicker, setHasContactPicker] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSavedContacts(getSavedContacts());
+      const onUpdate = () => setSavedContacts(getSavedContacts());
+      window.addEventListener('sd-contacts-updated', onUpdate);
+
+      if (navigator && 'contacts' in navigator && 'ContactsManager' in window) {
+        setHasContactPicker(true);
+      }
+      return () => window.removeEventListener('sd-contacts-updated', onUpdate);
+    }
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
       if (noteToEdit) {
@@ -61,11 +87,11 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
         setIsPinned(!!noteToEdit.is_pinned);
         setIsDateLocked(false);
       } else {
-        setTitle('');
+        setTitle(prefilledContact?.name || '');
         setDescription('');
         setType('THEY_OWE_ME');
         setAmount('');
-        setPhoneNumber('');
+        setPhoneNumber(prefilledContact?.phone || '');
         const initialDate = defaultDueDate || '';
         setDueDate(initialDate);
         setCardColor('yellow');
@@ -74,9 +100,38 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
       }
       setError(null);
     }
-  }, [isOpen, noteToEdit, defaultDueDate]);
+  }, [isOpen, noteToEdit, defaultDueDate, prefilledContact]);
 
   if (!isOpen) return null;
+
+  const handleSelectSavedContact = (contactId: string) => {
+    if (!contactId) return;
+    const found = savedContacts.find((c) => c.id === contactId);
+    if (found) {
+      setPhoneNumber(found.phone);
+      if (!title.trim()) {
+        setTitle(found.name);
+      }
+    }
+  };
+
+  const handlePickFromNativeContacts = async () => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const contacts = await (navigator as any).contacts.select(['name', 'tel'], { multiple: false });
+      if (contacts && contacts[0]) {
+        if (contacts[0].tel && contacts[0].tel.length > 0) {
+          const rawTel = contacts[0].tel[0].replace(/\D/g, '');
+          setPhoneNumber(rawTel);
+        }
+        if (contacts[0].name && contacts[0].name.length > 0 && !title.trim()) {
+          setTitle(contacts[0].name[0]);
+        }
+      }
+    } catch (err) {
+      console.warn('Native contact picker cancelled:', err);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +157,8 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
 
     setIsSubmitting(true);
     try {
+      const trimmedPhone = phoneNumber.trim();
+
       if (noteToEdit) {
         const res = await updateNote({
           ...noteToEdit,
@@ -109,7 +166,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
           description: description.trim(),
           type,
           amount: parsedAmount ?? null,
-          phone_number: phoneNumber.trim() || null,
+          phone_number: trimmedPhone || null,
           due_date: dueDate || null,
           card_color: cardColor,
           is_pinned: isPinned,
@@ -125,7 +182,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
           description: description.trim(),
           type,
           amount: parsedAmount,
-          phone_number: phoneNumber.trim() || undefined,
+          phone_number: trimmedPhone || undefined,
           due_date: dueDate || undefined,
           card_color: cardColor,
           is_pinned: isPinned,
@@ -136,6 +193,15 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
           return;
         }
       }
+
+      // Auto-save friend's contact into the directory
+      if (trimmedPhone) {
+        const friendCandidate = title.split(/[-–—:(]/)[0].trim();
+        if (friendCandidate) {
+          saveOrUpdateContact(friendCandidate, trimmedPhone);
+        }
+      }
+
       onClose();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
@@ -162,10 +228,10 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-900 dark:text-white">
-                {noteToEdit ? 'Edit Financial Note' : 'New Note / Friend Due (Khata)'}
+                {noteToEdit ? 'Edit Financial Note' : 'New Financial Note / Due'}
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Cloud synced across all devices &amp; accessible offline
+                Khata entry, friend dues, loan tracker, or recurring reminder
               </p>
             </div>
           </div>
@@ -177,26 +243,28 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
           </button>
         </div>
 
-        {/* Modal Body Form */}
-        <form onSubmit={handleSubmit} className="space-y-4 pt-4 max-h-[75vh] overflow-y-auto">
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           {error && (
-            <div className="flex items-start gap-2.5 p-3 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 rounded-xl">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+              <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* Calendar Date Captured & Locked Banner */}
+          {/* Locked Calendar Date Pill if opened from calendar */}
           {isDateLocked && dueDate && (
-            <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-xs text-emerald-900 dark:text-emerald-200 shadow-2xs">
-              <span className="flex items-center gap-2 font-medium">
-                <Calendar className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                <span>Scheduling on: <strong className="font-bold underline decoration-emerald-500/50">{formatDisplayDate(dueDate)}</strong></span>
+            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 text-xs">
+              <span className="flex items-center gap-2 font-medium text-emerald-800 dark:text-emerald-300">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span>
+                  Adding for selected date: <strong>{formatDisplayDate(dueDate)}</strong>
+                </span>
               </span>
               <button
                 type="button"
                 onClick={() => setIsDateLocked(false)}
-                className="flex items-center gap-1 text-[11px] bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-500/30 px-2 py-0.5 rounded-full font-bold transition-colors"
+                className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
                 title="Click to unlock and select a different date"
               >
                 <Lock className="w-2.5 h-2.5" />
@@ -278,7 +346,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
                 Amount (₹) {type === 'REMINDER' ? '(Optional)' : '*'}
               </label>
               <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-zinc-400 dark:text-zinc-500 font-semibold">
+                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm">
                   ₹
                 </span>
                 <input
@@ -288,7 +356,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 py-2.5 pl-8 pr-3.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 pl-8 pr-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
                   required={type !== 'REMINDER'}
                 />
               </div>
@@ -296,9 +364,8 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1">
-                  <span>Due Date / Target Date</span>
-                  {type === 'REMINDER' && <span className="text-zinc-400 font-normal">(Optional)</span>}
+                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                  Target / Due Date (Optional)
                 </label>
                 {isDateLocked && (
                   <button
@@ -334,7 +401,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
             </div>
           </div>
 
-          {/* Friend WhatsApp Number */}
+          {/* Friend WhatsApp Number: Input is half-size on PC/desktop, with Pick Existing & Import in the empty space */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
@@ -343,13 +410,54 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
               </label>
               <span className="text-[10px] text-zinc-400">For 1-tap WhatsApp reminders</span>
             </div>
-            <input
-              type="tel"
-              value={phoneNumber}
-              onChange={(e) => setPhoneNumber(e.target.value)}
-              placeholder="e.g. 9876543210 or +919876543210"
-              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-            />
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Left Column (Half size on PC): Phone Number Input */}
+              <div className="relative">
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="e.g. 7319332362"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                />
+              </div>
+
+              {/* Right Column (Half size on PC): Pick Existing Contact & Mobile Import */}
+              <div className="flex items-center gap-1.5">
+                {/* Pick Existing Contact Dropdown */}
+                <div className="relative flex-1">
+                  <select
+                    value=""
+                    onChange={(e) => handleSelectSavedContact(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3 py-2.5 text-xs text-zinc-700 dark:text-zinc-300 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer truncate"
+                  >
+                    <option value="">
+                      {savedContacts.length > 0 ? '👤 Pick Saved Friend...' : 'No Saved Contacts'}
+                    </option>
+                    {savedContacts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.phone})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Import from Native Contacts (Mobile / Smaller screens) */}
+                {hasContactPicker && (
+                  <button
+                    type="button"
+                    onClick={handlePickFromNativeContacts}
+                    className="flex items-center gap-1 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold shadow-xs shrink-0 transition-colors cursor-pointer"
+                    title="Pick contact from your phone"
+                  >
+                    <BookUser className="w-3.5 h-3.5" />
+                    <span className="sm:hidden">Import</span>
+                    <span className="hidden sm:inline">Phone</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
 
           {/* Description / Extra Details */}
@@ -361,7 +469,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add details, UPI transaction reference, phone number, or notes..."
+              placeholder="Add details, reason (e.g. Dinner share), or reference notes..."
               className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors resize-none"
             />
           </div>
@@ -377,33 +485,32 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
                   key={c.id}
                   type="button"
                   onClick={() => setCardColor(c.id)}
-                  title={c.label}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+                    c.bg
+                  } border ${c.border} ${
                     cardColor === c.id
-                      ? `${c.bg} ${c.border} ring-2 ring-emerald-500 text-zinc-900 dark:text-white shadow-sm`
-                      : 'border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                      ? 'ring-2 ring-emerald-500 shadow-sm scale-105'
+                      : 'opacity-70 hover:opacity-100'
                   }`}
                 >
-                  <span className={`w-3 h-3 rounded-full ${c.dot}`} />
-                  <span>{c.label.split(' ')[0]}</span>
+                  <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
+                  <span className="text-zinc-900 dark:text-white">{c.label}</span>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Pin to top */}
-          <div className="flex items-center justify-between pt-1">
-            <label className="flex items-center gap-2 cursor-pointer select-none">
+          {/* Pin toggle */}
+          <div className="flex items-center justify-between pt-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
               <input
                 type="checkbox"
                 checked={isPinned}
                 onChange={(e) => setIsPinned(e.target.checked)}
-                className="h-4 w-4 rounded border-zinc-300 dark:border-zinc-700 text-amber-500 focus:ring-amber-500"
+                className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
               />
-              <span className="text-xs font-semibold text-zinc-900 dark:text-white flex items-center gap-1">
-                <Pin className="w-3.5 h-3.5 text-amber-500" />
-                Pin to top of sticky board
-              </span>
+              <Pin className="w-3.5 h-3.5 text-amber-500" />
+              <span>Pin to top of list</span>
             </label>
           </div>
 
@@ -413,16 +520,16 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 transition-colors"
+              className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
+              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50 cursor-pointer"
             >
-              {isSubmitting ? 'Saving...' : noteToEdit ? 'Save Changes' : 'Create Note'}
+              {isSubmitting ? 'Saving...' : noteToEdit ? 'Update Note' : 'Create Note'}
             </button>
           </div>
         </form>

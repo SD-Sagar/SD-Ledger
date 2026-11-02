@@ -91,6 +91,14 @@ export interface UserUpiSettings {
   payeeName: string;
 }
 
+export interface SavedContact {
+  id: string;
+  name: string;
+  phone: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface SyncQueueItem {
   id: string;
   table: 'accounts' | 'transactions' | 'reconciliations' | 'audit_logs' | 'financial_notes';

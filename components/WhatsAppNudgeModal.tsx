@@ -18,9 +18,10 @@ import {
   BookUser,
 } from 'lucide-react';
 import { useLedger } from '../context/LedgerContext';
-import { FinancialNote } from '../lib/types';
+import { FinancialNote, SavedContact } from '../lib/types';
 import { formatINR, formatDisplayDate } from '../lib/utils/formatters';
 import { getStoredUpiSettings, buildUpiPayUri } from '../lib/utils/upi';
+import { getSavedContacts, saveOrUpdateContact } from '../lib/utils/contacts';
 
 interface WhatsAppNudgeModalProps {
   isOpen: boolean;
@@ -46,7 +47,17 @@ export function WhatsAppNudgeModal({
   const [canShareFile, setCanShareFile] = useState(false);
   const [hasContactPicker, setHasContactPicker] = useState(false);
   const [phoneSaved, setPhoneSaved] = useState(false);
+  const [savedContactsList, setSavedContactsList] = useState<SavedContact[]>([]);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setSavedContactsList(getSavedContacts());
+      const onUpdate = () => setSavedContactsList(getSavedContacts());
+      window.addEventListener('sd-contacts-updated', onUpdate);
+      return () => window.removeEventListener('sd-contacts-updated', onUpdate);
+    }
+  }, []);
 
   // Check feature support for Web Share API and Contact Picker
   useEffect(() => {
@@ -263,16 +274,9 @@ Thank you!`;
         }
       }
 
-      // 2. Save into local contact book
-      if (typeof window !== 'undefined' && friendName && friendName !== 'Friend' && cleanDigits) {
-        try {
-          const raw = localStorage.getItem('sd_contacts_book');
-          const book = raw ? JSON.parse(raw) : {};
-          book[friendName.toLowerCase()] = cleanDigits;
-          localStorage.setItem('sd_contacts_book', JSON.stringify(book));
-        } catch {
-          // ignore
-        }
+      // 2. Save into saved contacts directory
+      if (friendName && friendName !== 'Friend' && cleanDigits) {
+        saveOrUpdateContact(friendName, cleanDigits);
       }
     }, 400);
   };
@@ -493,45 +497,78 @@ Thank you!`;
             </div>
           )}
 
-          {/* Recipient WhatsApp Phone Input with Auto-Save & Contacts Memory */}
+          {/* Recipient WhatsApp Phone Input: Half size on PC with Pick Existing & Import */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
                 <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span>Friend&apos;s WhatsApp Number (Optional)</span>
               </label>
-              <div className="flex items-center gap-2">
-                {phoneSaved && (
-                  <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold animate-in fade-in duration-150">
-                    <Check className="w-3 h-3" />
-                    <span>Saved to note</span>
-                  </span>
-                )}
+              {phoneSaved && (
+                <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold animate-in fade-in duration-150">
+                  <Check className="w-3 h-3" />
+                  <span>Saved to note</span>
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {/* Left Column (Half size on PC): Phone Number Input */}
+              <div className="relative">
+                <input
+                  type="tel"
+                  value={recipientPhone}
+                  onChange={(e) => {
+                    setRecipientPhone(e.target.value);
+                    persistPhoneNumber(e.target.value);
+                  }}
+                  placeholder="e.g. 7319332362"
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                />
+              </div>
+
+              {/* Right Column (Half size on PC): Pick Existing Contact & Mobile Import */}
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <select
+                    value=""
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      if (!selectedId) return;
+                      const found = savedContactsList.find((c) => c.id === selectedId);
+                      if (found) {
+                        setRecipientPhone(found.phone);
+                        persistPhoneNumber(found.phone);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3 py-2.5 text-xs text-zinc-700 dark:text-zinc-300 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer truncate"
+                  >
+                    <option value="">
+                      {savedContactsList.length > 0 ? '👤 Pick Saved Friend...' : 'No Saved Contacts'}
+                    </option>
+                    {savedContactsList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.phone})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {hasContactPicker && (
                   <button
                     type="button"
                     onClick={handlePickFromContacts}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
-                    title="Select contact from phone book"
+                    className="flex items-center gap-1 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold shadow-xs shrink-0 transition-colors cursor-pointer"
+                    title="Pick contact from your phone"
                   >
                     <BookUser className="w-3.5 h-3.5" />
-                    <span>Pick Contact</span>
+                    <span className="sm:hidden">Import</span>
+                    <span className="hidden sm:inline">Phone</span>
                   </button>
                 )}
               </div>
             </div>
-            <div className="relative">
-              <input
-                type="tel"
-                value={recipientPhone}
-                onChange={(e) => {
-                  setRecipientPhone(e.target.value);
-                  persistPhoneNumber(e.target.value);
-                }}
-                placeholder="e.g. 9876543210 (Indian mobile) or with country code"
-                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-              />
-            </div>
+
             {/* Quick Suggestion Pill from Previous Notes if field is empty or changed */}
             {suggestedPhone && recipientPhone.replace(/\D/g, '') !== suggestedPhone.replace(/\D/g, '') && (
               <div className="mt-1.5 flex items-center gap-2">
