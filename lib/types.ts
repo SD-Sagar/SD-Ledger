@@ -56,13 +56,26 @@ export interface AuditLog {
 export type NoteType = 'THEY_OWE_ME' | 'I_OWE_THEM' | 'REMINDER';
 export type NoteColor = 'yellow' | 'mint' | 'rose' | 'sky' | 'lavender' | 'slate';
 
+export interface NotePaymentRecord {
+  id: string; // UUID
+  amount: number;
+  date: string; // YYYY-MM-DD
+  account_id?: string | null;
+  account_name?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
 export interface FinancialNote {
   id: string; // UUID
   user_id: string;
   title: string;
   description?: string;
   type: NoteType;
-  amount?: number | null;
+  amount?: number | null; // Represents remaining due balance
+  original_amount?: number | null; // Total original commitment before partial payments
+  payment_history?: NotePaymentRecord[]; // Recorded partial payments
+  phone_number?: string | null; // Friend's WhatsApp/Contact number
   due_date?: string | null; // YYYY-MM-DD
   card_color: NoteColor;
   is_pinned: boolean;
@@ -71,6 +84,11 @@ export interface FinancialNote {
   resolved_transaction_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface UserUpiSettings {
+  upiId: string;
+  payeeName: string;
 }
 
 export interface SyncQueueItem {

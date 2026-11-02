@@ -19,10 +19,12 @@ import {
   ArrowLeftRight,
   MoreVertical,
   Calculator,
+  Settings,
 } from 'lucide-react';
 import { DEMO_USER_ID } from '../lib/constants';
 import { BrandLogo } from './BrandLogo';
 import { NotificationCenter } from './NotificationCenter';
+import { UserSettingsModal } from './UserSettingsModal';
 
 interface NavbarProps {
   onOpenAuth: (prompt?: string) => void;
@@ -53,10 +55,35 @@ export function Navbar({
   const [showSwitchModal, setShowSwitchModal] = useState(false);
   const [clearDataOnSwitch, setClearDataOnSwitch] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isPushingCloud, setIsPushingCloud] = useState(false);
 
   const menuRef = useRef<HTMLDivElement>(null);
+  const userDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Listen for global request to open settings (e.g. from WhatsApp nudge)
+  useEffect(() => {
+    const handleOpenSettingsEvent = () => setShowSettingsModal(true);
+    window.addEventListener('sd-open-settings', handleOpenSettingsEvent);
+    return () => window.removeEventListener('sd-open-settings', handleOpenSettingsEvent);
+  }, []);
+
+  // Close user dropdown on outside click
+  useEffect(() => {
+    function handleUserDropdownOutside(event: MouseEvent) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setShowUserDropdown(false);
+      }
+    }
+    if (showUserDropdown) {
+      document.addEventListener('mousedown', handleUserDropdownOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleUserDropdownOutside);
+    };
+  }, [showUserDropdown]);
 
   const handlePushClick = async () => {
     if (!navigator.onLine) {
@@ -300,6 +327,19 @@ export function Navbar({
                     </div>
                   )}
 
+                  {/* Settings & UPI Profile Option in mobile menu */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMoreMenu(false);
+                      setShowSettingsModal(true);
+                    }}
+                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
+                  >
+                    <Settings className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span>Settings &amp; UPI Profile</span>
+                  </button>
+
                   {isDemoUser && (
                     <>
                       <button
@@ -392,12 +432,13 @@ export function Navbar({
               )}
             </div>
 
-            {/* Desktop User Profile & Sign Out (Hidden on mobile < sm) */}
+            {/* Desktop User Profile & Closable Settings Dropdown List */}
             {user ? (
-              <div className="hidden sm:flex items-center gap-1 sm:gap-1.5">
+              <div className="relative hidden sm:block" ref={userDropdownRef}>
                 <button
-                  onClick={() => onOpenAuth()}
-                  className="flex items-center gap-1.5 sm:gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 sm:px-3 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-200 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800"
+                  type="button"
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+                  className="flex items-center gap-1.5 sm:gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2 sm:px-3 py-1.5 text-xs font-medium text-zinc-800 dark:text-zinc-200 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 cursor-pointer"
                 >
                   <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
                     {user.fullName ? user.fullName[0].toUpperCase() : 'U'}
@@ -412,13 +453,78 @@ export function Navbar({
                   )}
                 </button>
 
-                <button
-                  onClick={() => signOut()}
-                  title="Sign Out"
-                  className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 p-2 text-zinc-500 dark:text-zinc-400 hover:border-rose-300 dark:hover:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 dark:hover:text-rose-400 transition-colors"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                </button>
+                {/* Closable Dropdown List with Settings & UPI Configuration */}
+                {showUserDropdown && (
+                  <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                    <div className="px-3 py-2.5 mb-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
+                      <p className="text-xs font-bold text-zinc-900 dark:text-white truncate">
+                        {user.fullName || 'SD-Ledger User'}
+                      </p>
+                      <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
+                        {user.email}
+                      </p>
+                    </div>
+
+                    <div className="space-y-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          setShowSettingsModal(true);
+                        }}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-zinc-800 dark:text-zinc-200 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors text-left cursor-pointer"
+                      >
+                        <Settings className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        <div>
+                          <span>Settings &amp; UPI Profile</span>
+                          <span className="block text-[10px] text-zinc-400 font-normal">
+                            Configure UPI for WhatsApp &amp; QR
+                          </span>
+                        </div>
+                      </button>
+
+                      {isDemoUser ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            setShowSwitchModal(true);
+                          }}
+                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
+                        >
+                          <ArrowLeftRight className="h-4 w-4 text-zinc-400 shrink-0" />
+                          <span>Switch Cloud Account</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            onOpenAuth();
+                          }}
+                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
+                        >
+                          <User className="h-4 w-4 text-zinc-400 shrink-0" />
+                          <span>Account Credentials</span>
+                        </button>
+                      )}
+
+                      <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            signOut();
+                          }}
+                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors text-left cursor-pointer"
+                        >
+                          <LogOut className="h-4 w-4 shrink-0" />
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <button
@@ -490,6 +596,12 @@ export function Navbar({
           </div>
         </div>
       )}
+
+      {/* User Settings & UPI Profile Modal */}
+      <UserSettingsModal
+        isOpen={showSettingsModal}
+        onClose={() => setShowSettingsModal(false)}
+      />
     </>
   );
 }

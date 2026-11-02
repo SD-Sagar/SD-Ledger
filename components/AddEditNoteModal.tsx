@@ -13,6 +13,7 @@ import {
   StickyNote,
   Lock,
   Calendar,
+  Phone,
 } from 'lucide-react';
 
 interface AddEditNoteModalProps {
@@ -38,6 +39,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
   const [description, setDescription] = useState('');
   const [type, setType] = useState<NoteType>('THEY_OWE_ME');
   const [amount, setAmount] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [cardColor, setCardColor] = useState<NoteColor>('yellow');
   const [isPinned, setIsPinned] = useState(false);
@@ -53,6 +55,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
         setDescription(noteToEdit.description || '');
         setType(noteToEdit.type);
         setAmount(noteToEdit.amount != null ? String(noteToEdit.amount) : '');
+        setPhoneNumber(noteToEdit.phone_number || '');
         setDueDate(noteToEdit.due_date || '');
         setCardColor(noteToEdit.card_color || 'yellow');
         setIsPinned(!!noteToEdit.is_pinned);
@@ -62,6 +65,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
         setDescription('');
         setType('THEY_OWE_ME');
         setAmount('');
+        setPhoneNumber('');
         const initialDate = defaultDueDate || '';
         setDueDate(initialDate);
         setCardColor('yellow');
@@ -105,6 +109,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
           description: description.trim(),
           type,
           amount: parsedAmount ?? null,
+          phone_number: phoneNumber.trim() || null,
           due_date: dueDate || null,
           card_color: cardColor,
           is_pinned: isPinned,
@@ -120,6 +125,7 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
           description: description.trim(),
           type,
           amount: parsedAmount,
+          phone_number: phoneNumber.trim() || undefined,
           due_date: dueDate || undefined,
           card_color: cardColor,
           is_pinned: isPinned,
@@ -326,6 +332,24 @@ export function AddEditNoteModal({ isOpen, onClose, noteToEdit, defaultDueDate }
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Friend WhatsApp Number */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Friend&apos;s WhatsApp Number (Optional)</span>
+              </label>
+              <span className="text-[10px] text-zinc-400">For 1-tap WhatsApp reminders</span>
+            </div>
+            <input
+              type="tel"
+              value={phoneNumber}
+              onChange={(e) => setPhoneNumber(e.target.value)}
+              placeholder="e.g. 9876543210 or +919876543210"
+              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+            />
           </div>
 
           {/* Description / Extra Details */}

@@ -8,6 +8,7 @@ import { RESOLVED_NOTES_RETENTION_DAYS } from '../lib/constants';
 import { AddEditNoteModal } from './AddEditNoteModal';
 import { SettleNoteModal } from './SettleNoteModal';
 import { FinancialCalendar } from './FinancialCalendar';
+import { WhatsAppNudgeModal } from './WhatsAppNudgeModal';
 import {
   Pin,
   Plus,
@@ -25,6 +26,7 @@ import {
   TrendingDown,
   Layers,
   Sparkles,
+  Clock,
 } from 'lucide-react';
 
 type FilterTab = 'active' | 'THEY_OWE_ME' | 'I_OWE_THEM' | 'REMINDER' | 'resolved';
@@ -91,6 +93,7 @@ export function FinancialNotesSection() {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [noteToEdit, setNoteToEdit] = useState<FinancialNote | null>(null);
   const [noteToSettle, setNoteToSettle] = useState<FinancialNote | null>(null);
+  const [noteForWhatsApp, setNoteForWhatsApp] = useState<FinancialNote | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'calendar'>('cards');
   const [prefilledDueDate, setPrefilledDueDate] = useState<string | undefined>(undefined);
 
@@ -257,26 +260,28 @@ export function FinancialNotesSection() {
           </div>
         </div>
 
-        {/* Quick Action Button */}
-        <div className="p-4 bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-white dark:to-zinc-950 border border-emerald-500/20 rounded-2xl shadow-sm flex flex-col justify-between">
+        {/* Active Notes & Commitments Summary KPI Card */}
+        <div className="p-4 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-bold text-zinc-900 dark:text-white">
-              Financial Sticky Notes
+            <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400" />
+              Active Notes &amp; Dues
             </span>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-tight">
-              Track friend dues, khata &amp; settle into accounts
-            </p>
+            <div className="text-xl font-extrabold font-mono text-zinc-900 dark:text-white mt-1">
+              {summary.activeCount}{' '}
+              <span className="text-xs font-semibold font-sans text-zinc-500 dark:text-zinc-400">
+                active
+              </span>
+            </div>
+            <span className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 block">
+              {summary.resolvedCount > 0
+                ? `${summary.resolvedCount} settled recently`
+                : 'Friend dues, loans & reminders'}
+            </span>
           </div>
-          <button
-            onClick={() => {
-              setNoteToEdit(null);
-              setIsAddModalOpen(true);
-            }}
-            className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-sm transition-all"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Note / Due</span>
-          </button>
+          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
+            <StickyNote className="w-5 h-5" />
+          </div>
         </div>
       </div>
 
@@ -309,17 +314,20 @@ export function FinancialNotesSection() {
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={() => {
-            setPrefilledDueDate(undefined);
-            setIsAddModalOpen(true);
-          }}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-all shrink-0"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New Note / Due</span>
-        </button>
+        {viewMode === 'cards' && (
+          <button
+            type="button"
+            onClick={() => {
+              setPrefilledDueDate(undefined);
+              setNoteToEdit(null);
+              setIsAddModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow-xs transition-all shrink-0 w-full sm:w-auto"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>New Note / Due</span>
+          </button>
+        )}
       </div>
 
       {viewMode === 'calendar' ? (
@@ -525,18 +533,39 @@ export function FinancialNotesSection() {
 
                   {/* Amount if any */}
                   {note.amount != null && (
-                    <div
-                      className={`text-xl font-extrabold font-mono mt-1 ${
-                        note.is_resolved
-                          ? 'line-through text-zinc-400 dark:text-zinc-500'
-                          : note.type === 'THEY_OWE_ME'
-                          ? 'text-emerald-700 dark:text-emerald-400'
-                          : note.type === 'I_OWE_THEM'
-                          ? 'text-rose-700 dark:text-rose-400'
-                          : 'text-zinc-900 dark:text-white'
-                      }`}
-                    >
-                      {formatINR(note.amount)}
+                    <div className="mt-1">
+                      <div
+                        className={`text-xl font-extrabold font-mono ${
+                          note.is_resolved
+                            ? 'line-through text-zinc-400 dark:text-zinc-500'
+                            : note.type === 'THEY_OWE_ME'
+                            ? 'text-emerald-700 dark:text-emerald-400'
+                            : note.type === 'I_OWE_THEM'
+                            ? 'text-rose-700 dark:text-rose-400'
+                            : 'text-zinc-900 dark:text-white'
+                        }`}
+                      >
+                        {formatINR(note.amount)}
+                        {note.payment_history && note.payment_history.length > 0 && !note.is_resolved && (
+                          <span className="text-xs font-sans font-medium text-zinc-500 dark:text-zinc-400 ml-1.5">
+                            remaining
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Partial Payments Progress Badge */}
+                      {note.payment_history && note.payment_history.length > 0 && (
+                        <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-md">
+                            <Sparkles className="w-3 h-3" />
+                            {formatINR(note.payment_history.reduce((s, p) => s + p.amount, 0))} paid
+                            {note.original_amount ? ` of ${formatINR(note.original_amount)}` : ''}
+                          </span>
+                          <span className="text-[10px] text-zinc-400 font-mono">
+                            ({note.payment_history.length} {note.payment_history.length === 1 ? 'part' : 'parts'})
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -605,14 +634,29 @@ export function FinancialNotesSection() {
                         <span>Reopen</span>
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => setNoteToSettle(note)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors"
-                      >
-                        <CheckCircle2 className="w-3 h-3" />
-                        <span>Settle &amp; Resolve</span>
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setNoteToSettle(note)}
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg shadow-xs transition-colors cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>Settle</span>
+                        </button>
+
+                        {/* WhatsApp Nudge Button */}
+                        <button
+                          type="button"
+                          onClick={() => setNoteForWhatsApp(note)}
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-lg transition-colors cursor-pointer"
+                          title="Send WhatsApp Nudge with UPI link & QR"
+                        >
+                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                            <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.27 7.5C9.09 7.5 8.79 7.56 8.54 7.84C8.29 8.11 7.58 8.77 7.58 10.12C7.58 11.47 8.56 12.77 8.7 12.95C8.84 13.13 10.63 15.89 13.37 17.07C14.02 17.35 14.53 17.52 14.93 17.65C15.58 17.86 16.18 17.83 16.65 17.76C17.17 17.68 18.25 17.11 18.48 16.46C18.71 15.81 18.71 15.26 18.64 15.14C18.57 15.02 18.39 14.96 18.12 14.82C17.85 14.68 16.5 14.02 16.25 13.93C16 13.84 15.82 13.79 15.64 14.07C15.46 14.35 14.94 14.96 14.78 15.14C14.62 15.32 14.46 15.34 14.19 15.2C13.92 15.06 13.05 14.78 12.02 13.86C11.22 13.15 10.68 12.27 10.52 12C10.36 11.73 10.5 11.58 10.64 11.44C10.76 11.32 10.91 11.13 11.05 10.97C11.19 10.81 11.24 10.7 11.33 10.52C11.42 10.34 11.38 10.18 11.31 10.04C11.24 9.9 10.69 8.54 10.46 8C10.24 7.47 10.01 7.54 9.85 7.53C9.7 7.53 9.52 7.5 9.27 7.5Z" />
+                          </svg>
+                          <span>WhatsApp</span>
+                        </button>
+                      </div>
                     )}
 
                     <div className="flex items-center gap-1">
@@ -663,6 +707,16 @@ export function FinancialNotesSection() {
         isOpen={!!noteToSettle}
         onClose={() => setNoteToSettle(null)}
         note={noteToSettle}
+      />
+
+      {/* WhatsApp Nudge Modal */}
+      <WhatsAppNudgeModal
+        isOpen={!!noteForWhatsApp}
+        onClose={() => setNoteForWhatsApp(null)}
+        note={noteForWhatsApp}
+        onOpenSettings={() => {
+          window.dispatchEvent(new CustomEvent('sd-open-settings'));
+        }}
       />
     </div>
   );

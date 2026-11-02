@@ -85,6 +85,17 @@ export function MonthlyReportModal({
     return availableMonths[0]?.key || todayStr.substring(0, 7);
   });
 
+  // Synchronize selectedMonth whenever modal opens with a targeted initialMonth
+  React.useEffect(() => {
+    if (isOpen) {
+      if (initialMonth && availableMonths.some((m) => m.key === initialMonth)) {
+        setSelectedMonth(initialMonth);
+      } else if (!initialMonth && availableMonths.length > 0) {
+        setSelectedMonth(availableMonths[0].key);
+      }
+    }
+  }, [isOpen, initialMonth, availableMonths]);
+
   // Checkbox option: include full transactions in PDF export or 1-page summary only
   const [includeTransactionsInPdf, setIncludeTransactionsInPdf] = useState(true);
 

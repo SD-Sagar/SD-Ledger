@@ -85,7 +85,25 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
   const [showAddAccountModal, setShowAddAccountModal] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportModalMonth, setReportModalMonth] = useState<string | undefined>();
-  const [dismissedReportBanner, setDismissedReportBanner] = useState<string | null>(null);
+  const [dismissedReportBanner, setDismissedReportBanner] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem('sd_dismissed_report_banner');
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const handleDismissReportBanner = (monthStr: string) => {
+    setDismissedReportBanner(monthStr);
+    try {
+      localStorage.setItem('sd_dismissed_report_banner', monthStr);
+    } catch {
+      // ignore
+    }
+  };
   const [reconcileTargetAccountId, setReconcileTargetAccountId] = useState<string | undefined>();
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
 
@@ -143,30 +161,16 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
     return map;
   }, [accounts]);
 
-  // Smart End-of-Month / Start-of-Month detection for monthly report suggestion
+  // Smart Start-of-Month detection for monthly report suggestion
+  // Strictly loads only for 3 days from the last month: dates 1, 2, and 3
   const todayStr = useMemo(() => getTodayKolkata(), []);
   const smartReportSuggestion = useMemo(() => {
     const parts = todayStr.split('-').map(Number);
     if (parts.length !== 3) return null;
     const [year, month, day] = parts;
-    const daysInCurrentMonth = new Date(year, month, 0).getDate();
 
-    // End of month: last 4 days of month (day >= daysInCurrentMonth - 3)
-    if (day >= daysInCurrentMonth - 3) {
-      const monthStr = `${year}-${String(month).padStart(2, '0')}`;
-      if (dismissedReportBanner === monthStr) return null;
-      const monthName = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
-      return {
-        type: 'end_of_month' as const,
-        monthStr,
-        label: monthName,
-        title: `Wrap up ${monthName}'s Ledger`,
-        description: `Month closes in ${daysInCurrentMonth - day + 1} days. Review opening & closing balances, savings rate, and export statements.`,
-      };
-    }
-
-    // Start of month: first 4 days of month (day <= 4)
-    if (day <= 4) {
+    // Strictly trigger on dates 1, 2, and 3 of the month
+    if (day >= 1 && day <= 3) {
       const prevDate = new Date(year, month - 2, 1);
       const prevYear = prevDate.getFullYear();
       const prevMonth = prevDate.getMonth() + 1;
@@ -436,7 +440,7 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setDismissedReportBanner(smartReportSuggestion.monthStr)}
+                  onClick={() => handleDismissReportBanner(smartReportSuggestion.monthStr)}
                   className="p-1.5 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors"
                   title="Dismiss suggestion"
                 >

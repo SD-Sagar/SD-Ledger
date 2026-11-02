@@ -10,6 +10,7 @@ import {
   FinancialNote,
   NoteType,
   NoteColor,
+  NotePaymentRecord,
   SyncStatus,
   LedgerSummary,
   SyncQueueItem,
@@ -157,6 +158,7 @@ interface LedgerContextType {
     description?: string;
     type: NoteType;
     amount?: number;
+    phone_number?: string;
     due_date?: string;
     card_color?: NoteColor;
     is_pinned?: boolean;
@@ -176,8 +178,10 @@ interface LedgerContextType {
       convertToTransaction?: boolean;
       accountId?: string;
       transactionDate?: string;
+      settleAmount?: number;
+      paymentNotes?: string;
     }
-  ) => Promise<{ success: boolean; transactionId?: string; error?: string }>;
+  ) => Promise<{ success: boolean; isFullySettled?: boolean; transactionId?: string; error?: string }>;
 
   reopenNote: (
     noteId: string
@@ -190,6 +194,86 @@ interface LedgerContextType {
 }
 
 const LedgerContext = createContext<LedgerContextType | undefined>(undefined);
+
+/**
+ * Safely syncs a financial note to Supabase with schema auto-fallback.
+ * If the user's remote Supabase schema hasn't yet added the new columns
+ * (original_amount, payment_history, phone_number), it automatically retries
+ * with base columns so the cloud sync never errors or breaks.
+ */
+async function safeSyncNoteToSupabase(
+  note: FinancialNote,
+  operation: 'insert' | 'upsert' = 'upsert'
+): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !navigator.onLine) return;
+
+  const toPayload = (includeExtended: boolean): Record<string, unknown> => {
+    const base: Record<string, unknown> = {
+      id: note.id,
+      user_id: note.user_id,
+      title: note.title,
+      description: note.description || null,
+      type: note.type,
+      amount: note.amount != null ? note.amount : null,
+      due_date: note.due_date || null,
+      card_color: note.card_color || 'yellow',
+      is_pinned: !!note.is_pinned,
+      is_resolved: !!note.is_resolved,
+      resolved_at: note.resolved_at || null,
+      resolved_transaction_id: note.resolved_transaction_id || null,
+      created_at: note.created_at,
+      updated_at: note.updated_at,
+    };
+
+    if (includeExtended) {
+      if (note.original_amount !== undefined) base.original_amount = note.original_amount;
+      if (note.payment_history !== undefined) base.payment_history = note.payment_history;
+      if (note.phone_number !== undefined) base.phone_number = note.phone_number;
+    }
+
+    return base;
+  };
+
+  try {
+    const fullPayload = toPayload(true);
+    const { error } =
+      operation === 'insert'
+        ? await supabase.from('financial_notes').insert(fullPayload)
+        : await supabase.from('financial_notes').upsert(fullPayload, { onConflict: 'id' });
+
+    if (error) {
+      const msg = error.message || '';
+      // If Supabase schema does not have the extended columns yet, automatically fallback to base schema
+      if (
+        msg.includes('schema cache') ||
+        msg.includes('original_amount') ||
+        msg.includes('payment_history') ||
+        msg.includes('phone_number') ||
+        error.code === 'PGRST204'
+      ) {
+        const basePayload = toPayload(false);
+        const fallbackRes =
+          operation === 'insert'
+            ? await supabase.from('financial_notes').insert(basePayload)
+            : await supabase.from('financial_notes').upsert(basePayload, { onConflict: 'id' });
+
+        if (fallbackRes.error) {
+          console.warn('Fallback note cloud sync failed:', fallbackRes.error.message);
+        } else {
+          console.info(
+            'Note synced to Supabase with base schema. Run ALTER TABLE migration to enable cloud sync of partial settlements & contact numbers.'
+          );
+        }
+        return;
+      }
+
+      console.warn(`Could not sync note to cloud (${operation}):`, error.message);
+    }
+  } catch (cloudErr) {
+    console.warn(`Could not sync note to cloud (${operation}):`, cloudErr);
+  }
+}
 
 export function LedgerProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -332,13 +416,8 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (!remoteNoteMap.has(ln.id)) {
-              const { error: pushNoteErr } = await supabase.from('financial_notes').upsert({
-                ...ln,
-                user_id: uid,
-              }, { onConflict: 'id' });
-              if (!pushNoteErr) {
-                remoteNoteMap.set(ln.id, ln);
-              }
+              await safeSyncNoteToSupabase({ ...ln, user_id: uid }, 'upsert');
+              remoteNoteMap.set(ln.id, ln);
             }
           }
 
@@ -709,10 +788,10 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         if (!noteMap.has(n.id)) noteMap.set(n.id, n);
       });
       for (const noteItem of Array.from(noteMap.values())) {
-        await supabase.from('financial_notes').upsert({
+        await safeSyncNoteToSupabase({
           ...noteItem,
           user_id: effectiveUid,
-        }, { onConflict: 'id' });
+        }, 'upsert');
       }
 
       await refreshData(effectiveUid);
@@ -1794,6 +1873,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     description?: string;
     type: NoteType;
     amount?: number;
+    phone_number?: string;
     due_date?: string;
     card_color?: NoteColor;
     is_pinned?: boolean;
@@ -1803,6 +1883,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     const nowIso = new Date().toISOString();
     const noteId = generateUUID();
+    const parsedAmount = data.amount ? Math.round(Number(data.amount) * 100) / 100 : null;
 
     const note: FinancialNote = {
       id: noteId,
@@ -1810,7 +1891,10 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       title: data.title.trim(),
       description: data.description?.trim() || '',
       type: data.type,
-      amount: data.amount ? Math.round(Number(data.amount) * 100) / 100 : null,
+      amount: parsedAmount,
+      original_amount: parsedAmount,
+      payment_history: [],
+      phone_number: data.phone_number?.trim() || null,
       due_date: data.due_date || null,
       card_color: data.card_color || 'yellow',
       is_pinned: !!data.is_pinned,
@@ -1824,17 +1908,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     await idbSaveNote(note);
 
     if (userId !== DEMO_USER_ID) {
-      const supabase = getSupabase();
-      if (supabase && navigator.onLine) {
-        try {
-          const { error } = await supabase.from('financial_notes').insert(note);
-          if (error) {
-            console.error('Failed to insert note to Supabase:', error.message);
-          }
-        } catch (cloudErr) {
-          console.warn('Could not insert note directly to Supabase:', cloudErr);
-        }
-      }
+      await safeSyncNoteToSupabase(note, 'insert');
     } else {
       await idbAddToSyncQueue({
         id: generateUUID(),
@@ -1877,17 +1951,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     await idbSaveNote(note);
 
     if (userId !== DEMO_USER_ID) {
-      const supabase = getSupabase();
-      if (supabase && navigator.onLine) {
-        try {
-          const { error } = await supabase.from('financial_notes').upsert(note, { onConflict: 'id' });
-          if (error) {
-            console.error('Failed to update note in Supabase:', error.message);
-          }
-        } catch (cloudErr) {
-          console.warn('Could not update note in Supabase:', cloudErr);
-        }
-      }
+      await safeSyncNoteToSupabase(note, 'upsert');
     } else {
       await idbAddToSyncQueue({
         id: generateUUID(),
@@ -1960,32 +2024,55 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     return { success: true };
   };
 
-  // Resolve and Settle Note (Optional: Auto-record transaction in ledger)
+  // Resolve and Settle Note (Supports Full Settlement & Partial Settlements with Payment History)
   const resolveNote = async (
     noteId: string,
     options?: {
       convertToTransaction?: boolean;
       accountId?: string;
       transactionDate?: string;
+      settleAmount?: number;
+      paymentNotes?: string;
     }
-  ): Promise<{ success: boolean; transactionId?: string; error?: string }> => {
+  ): Promise<{ success: boolean; isFullySettled?: boolean; transactionId?: string; error?: string }> => {
     if (!userId) return { success: false, error: 'User is not logged in.' };
     const target = notes.find((n) => n.id === noteId);
     if (!target) return { success: false, error: 'Note not found.' };
 
     const nowIso = new Date().toISOString();
-    let createdTxId: string | null = null;
+    const txDate = options?.transactionDate || getTodayKolkata();
 
-    if (options?.convertToTransaction && options?.accountId && target.amount && target.amount > 0) {
-      const txDate = options.transactionDate || getTodayKolkata();
+    const currentDue = target.amount != null ? target.amount : 0;
+    const requestedSettleAmount =
+      options?.settleAmount != null
+        ? Math.round(Number(options.settleAmount) * 100) / 100
+        : currentDue;
+    const effectiveSettleAmount = Math.min(requestedSettleAmount, currentDue);
+
+    if (currentDue > 0 && effectiveSettleAmount <= 0) {
+      return { success: false, error: 'Settlement payment amount must be greater than zero.' };
+    }
+
+    const isFullySettled = currentDue <= 0 || effectiveSettleAmount >= currentDue;
+    const remainingBalance = Math.max(0, Math.round((currentDue - effectiveSettleAmount) * 100) / 100);
+
+    let createdTxId: string | null = null;
+    let targetAccountName: string | null = null;
+
+    if (options?.accountId) {
+      const acc = accounts.find((a) => a.id === options.accountId);
+      if (acc) targetAccountName = acc.display_name;
+    }
+
+    if (options?.convertToTransaction && options?.accountId && effectiveSettleAmount > 0) {
       if (target.type === 'THEY_OWE_ME') {
         // Friend paid us back -> Income into chosen account
         const res = await addIncome({
-          amount: target.amount,
+          amount: effectiveSettleAmount,
           toAccountId: options.accountId,
           category: 'Debt Repayment / Khata',
           date: txDate,
-          description: `Settled note: ${target.title}${target.description ? ` - ${target.description}` : ''}`,
+          description: `${isFullySettled ? 'Settled note' : 'Partial payment'}: ${target.title}${options?.paymentNotes ? ` (${options.paymentNotes})` : ''}`,
         });
         if (!res.success) {
           return { success: false, error: res.error || 'Failed to record income.' };
@@ -1993,11 +2080,11 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       } else if (target.type === 'I_OWE_THEM') {
         // We paid back friend -> Expense from chosen account
         const res = await addExpense({
-          amount: target.amount,
+          amount: effectiveSettleAmount,
           fromAccountId: options.accountId,
           category: 'Debt Repayment / Khata',
           date: txDate,
-          description: `Settled note: ${target.title}${target.description ? ` - ${target.description}` : ''}`,
+          description: `${isFullySettled ? 'Settled note' : 'Partial payment'}: ${target.title}${options?.paymentNotes ? ` (${options.paymentNotes})` : ''}`,
         });
         if (!res.success) {
           return { success: false, error: res.error || 'Failed to record expense.' };
@@ -2005,10 +2092,30 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Append to payment history
+    const paymentRecords: NotePaymentRecord[] = [...(target.payment_history || [])];
+    if (effectiveSettleAmount > 0) {
+      paymentRecords.push({
+        id: generateUUID(),
+        amount: effectiveSettleAmount,
+        date: txDate,
+        account_id: options?.accountId || null,
+        account_name: targetAccountName,
+        notes: options?.paymentNotes?.trim() || null,
+        created_at: nowIso,
+      });
+    }
+
     const updatedNote: FinancialNote = {
       ...target,
-      is_resolved: true,
-      resolved_at: nowIso,
+      original_amount:
+        target.original_amount != null
+          ? target.original_amount
+          : (target.amount || effectiveSettleAmount),
+      amount: remainingBalance,
+      payment_history: paymentRecords,
+      is_resolved: isFullySettled,
+      resolved_at: isFullySettled ? nowIso : null,
       resolved_transaction_id: createdTxId,
       updated_at: nowIso,
     };
@@ -2016,14 +2123,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     await idbSaveNote(updatedNote);
 
     if (userId !== DEMO_USER_ID) {
-      const supabase = getSupabase();
-      if (supabase && navigator.onLine) {
-        try {
-          await supabase.from('financial_notes').upsert(updatedNote, { onConflict: 'id' });
-        } catch (cloudErr) {
-          console.warn('Could not sync resolved note to Supabase:', cloudErr);
-        }
-      }
+      await safeSyncNoteToSupabase(updatedNote, 'upsert');
     } else {
       await idbAddToSyncQueue({
         id: generateUUID(),
@@ -2042,13 +2142,15 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       action: 'UPDATE',
       entity_type: 'NOTE',
       entity_id: noteId,
-      summary: `Resolved note: "${target.title}"${options?.convertToTransaction ? ' (Recorded in personal account)' : ''}`,
-      details: { note: updatedNote, options },
+      summary: isFullySettled
+        ? `Fully settled note: "${target.title}" (Amount: ₹${effectiveSettleAmount})`
+        : `Recorded partial payment of ₹${effectiveSettleAmount} for "${target.title}" (Remaining: ₹${remainingBalance})`,
+      details: { note: updatedNote, options, isFullySettled, effectiveSettleAmount, remainingBalance },
       created_at: nowIso,
     });
 
     await refreshData(userId);
-    return { success: true };
+    return { success: true, isFullySettled };
   };
 
   // Reopen Note
@@ -2071,14 +2173,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     await idbSaveNote(updatedNote);
 
     if (userId !== DEMO_USER_ID) {
-      const supabase = getSupabase();
-      if (supabase && navigator.onLine) {
-        try {
-          await supabase.from('financial_notes').upsert(updatedNote, { onConflict: 'id' });
-        } catch (cloudErr) {
-          console.warn('Could not sync reopened note to Supabase:', cloudErr);
-        }
-      }
+      await safeSyncNoteToSupabase(updatedNote, 'upsert');
     } else {
       await idbAddToSyncQueue({
         id: generateUUID(),

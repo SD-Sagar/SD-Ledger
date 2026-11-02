@@ -71,6 +71,9 @@ CREATE TABLE IF NOT EXISTS public.financial_notes (
     description TEXT,
     type TEXT NOT NULL DEFAULT 'REMINDER',
     amount NUMERIC(12, 2),
+    original_amount NUMERIC(12, 2),
+    payment_history JSONB DEFAULT '[]'::jsonb,
+    phone_number TEXT,
     due_date DATE,
     card_color TEXT NOT NULL DEFAULT 'yellow',
     is_pinned BOOLEAN NOT NULL DEFAULT false,
@@ -80,6 +83,11 @@ CREATE TABLE IF NOT EXISTS public.financial_notes (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Safe migrations for existing financial_notes tables (partial settlements & WhatsApp contact):
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS original_amount NUMERIC(12, 2);
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS payment_history JSONB DEFAULT '[]'::jsonb;
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS phone_number TEXT;
 
 -- ------------------------------------------------------------------------------
 -- INDEXES FOR MAXIMUM QUERY PERFORMANCE

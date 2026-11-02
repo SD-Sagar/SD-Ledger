@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { FinancialNote } from '../lib/types';
-import { getTodayKolkata, formatINR } from '../lib/utils/formatters';
+import { getTodayKolkata, formatINR, formatDisplayDate } from '../lib/utils/formatters';
 import {
   X,
   CheckCircle2,
@@ -12,6 +12,9 @@ import {
   AlertCircle,
   ChevronDown,
   Sparkles,
+  Receipt,
+  Layers,
+  History,
 } from 'lucide-react';
 
 interface SettleNoteModalProps {
@@ -23,6 +26,9 @@ interface SettleNoteModalProps {
 export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps) {
   const { accounts, summary, resolveNote } = useLedger();
 
+  const [settleMode, setSettleMode] = useState<'full' | 'partial'>('full');
+  const [settleAmount, setSettleAmount] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
   const [convertToTransaction, setConvertToTransaction] = useState(true);
   const [selectedAccountId, setSelectedAccountId] = useState(
     accounts.length > 0 ? accounts[0].id : ''
@@ -31,14 +37,39 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    if (isOpen && note) {
+      setSettleMode('full');
+      setSettleAmount(note.amount != null ? String(note.amount) : '');
+      setPaymentNotes('');
+      setSettleDate(getTodayKolkata());
+      setError(null);
+      if (accounts.length > 0 && !selectedAccountId) {
+        setSelectedAccountId(accounts[0].id);
+      }
+    }
+  }, [isOpen, note, accounts, selectedAccountId]);
+
   if (!isOpen || !note) return null;
 
-  const hasAmount = note.amount != null && note.amount > 0;
+  const currentDue = note.amount != null && note.amount > 0 ? note.amount : 0;
+  const hasAmount = currentDue > 0;
   const isKhata = note.type === 'THEY_OWE_ME' || note.type === 'I_OWE_THEM';
+
+  const numericSettle = parseFloat(settleAmount) || 0;
+  const remainingAfterPayment = Math.max(0, Math.round((currentDue - numericSettle) * 100) / 100);
+  const willBeFullySettled = settleMode === 'full' || numericSettle >= currentDue;
 
   const handleSettle = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const amountToSettle = settleMode === 'full' ? currentDue : numericSettle;
+
+    if (hasAmount && amountToSettle <= 0) {
+      setError('Please specify a settlement amount greater than 0.');
+      return;
+    }
 
     if (convertToTransaction && hasAmount && isKhata && !selectedAccountId) {
       setError('Please select an account for recording the settlement transaction.');
@@ -51,6 +82,8 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
         convertToTransaction: convertToTransaction && hasAmount && isKhata,
         accountId: selectedAccountId || undefined,
         transactionDate: settleDate,
+        settleAmount: hasAmount ? amountToSettle : undefined,
+        paymentNotes: paymentNotes.trim() || undefined,
       });
 
       if (!res.success) {
@@ -74,7 +107,7 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl text-zinc-900 dark:text-zinc-100 animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 sm:p-6 shadow-2xl text-zinc-900 dark:text-zinc-100 animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -85,10 +118,10 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
             </div>
             <div>
               <h2 className="text-base font-bold text-zinc-900 dark:text-white">
-                Settle &amp; Resolve Matter
+                Settle &amp; Record Payment
               </h2>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Cross-check resolved dues &amp; sync to bank ledger
+                Support full settlement or partial repayment installments
               </p>
             </div>
           </div>
@@ -125,23 +158,219 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                 }`}
               >
                 {note.type === 'THEY_OWE_ME'
-                  ? 'They Owed You'
+                  ? 'They Owe You'
                   : note.type === 'I_OWE_THEM'
-                  ? 'You Owed Them'
+                  ? 'You Owe Them'
                   : 'Reminder'}
               </span>
             </div>
+
             {hasAmount && (
-              <div className="text-2xl font-extrabold font-mono text-zinc-900 dark:text-white">
-                {formatINR(note.amount!)}
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <span className="text-[11px] text-zinc-500 dark:text-zinc-400 block">
+                    Current Outstanding Due
+                  </span>
+                  <div className="text-2xl font-extrabold font-mono text-zinc-900 dark:text-white">
+                    {formatINR(currentDue)}
+                  </div>
+                </div>
+                {note.original_amount != null && note.original_amount > currentDue && (
+                  <div className="text-right">
+                    <span className="text-[10px] text-zinc-400 block">Original Commitment</span>
+                    <span className="text-xs font-mono line-through text-zinc-400">
+                      {formatINR(note.original_amount)}
+                    </span>
+                  </div>
+                )}
               </div>
             )}
+
             {note.description && (
-              <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400 line-clamp-2 leading-relaxed pt-1">
                 {note.description}
               </p>
             )}
           </div>
+
+          {/* Past Payments History Accordion */}
+          {note.payment_history && note.payment_history.length > 0 && (
+            <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/30 p-3.5 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-zinc-700 dark:text-zinc-300">
+                <span className="flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5 text-indigo-500" />
+                  Past Partial Payments ({note.payment_history.length})
+                </span>
+                <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                  {formatINR(
+                    note.payment_history.reduce((sum, p) => sum + p.amount, 0)
+                  )}{' '}
+                  already paid
+                </span>
+              </div>
+              <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
+                {note.payment_history.map((record) => (
+                  <div
+                    key={record.id}
+                    className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800/60 text-xs"
+                  >
+                    <div>
+                      <span className="font-semibold text-zinc-900 dark:text-zinc-100">
+                        {formatINR(record.amount)}
+                      </span>
+                      {record.account_name && (
+                        <span className="text-zinc-400 text-[11px] ml-1.5">
+                          via {record.account_name}
+                        </span>
+                      )}
+                      {record.notes && (
+                        <p className="text-[10px] text-zinc-500 italic mt-0.5">
+                          &ldquo;{record.notes}&rdquo;
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-[11px] text-zinc-400 font-mono">
+                      {formatDisplayDate(record.date)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Settlement Mode Selection: Full vs Partial */}
+          {hasAmount && isKhata && (
+            <div className="space-y-3 pt-1">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Settlement Method
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-zinc-100 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettleMode('full');
+                      setSettleAmount(String(currentDue));
+                    }}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      settleMode === 'full'
+                        ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Full Settlement ({formatINR(currentDue)})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSettleMode('partial');
+                      if (!settleAmount || Number(settleAmount) === currentDue) {
+                        setSettleAmount(String(Math.round((currentDue / 2) * 100) / 100));
+                      }
+                    }}
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
+                      settleMode === 'partial'
+                        ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                        : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>Partial Repayment</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Partial Payment Amount Input & Quick Helpers */}
+              {settleMode === 'partial' && (
+                <div className="p-3.5 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 space-y-2.5 animate-in fade-in duration-150">
+                  <label className="block text-xs font-bold text-zinc-900 dark:text-white">
+                    Amount Paid Now (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-zinc-400 dark:text-zinc-500 font-semibold">
+                      ₹
+                    </span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="1"
+                      max={currentDue}
+                      value={settleAmount}
+                      onChange={(e) => setSettleAmount(e.target.value)}
+                      placeholder="0.00"
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 py-2.5 pl-8 pr-3.5 text-base font-mono font-bold text-zinc-900 dark:text-white focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                      required
+                    />
+                  </div>
+
+                  {/* Quick percentage pills */}
+                  <div className="flex items-center gap-1.5">
+                    {[0.25, 0.5, 0.75].map((pct) => {
+                      const quickVal = Math.round(currentDue * pct);
+                      return (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setSettleAmount(String(quickVal))}
+                          className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                        >
+                          {pct * 100}% (₹{quickVal})
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      onClick={() => setSettleAmount(String(currentDue))}
+                      className="px-2.5 py-1 text-[11px] font-semibold bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-lg text-zinc-700 dark:text-zinc-300 hover:border-indigo-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                    >
+                      100%
+                    </button>
+                  </div>
+
+                  {/* Impact preview */}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-indigo-200/50 dark:border-indigo-900/40">
+                    <span className="text-zinc-500 dark:text-zinc-400">
+                      Remaining After Payment:
+                    </span>
+                    <span className="font-bold font-mono text-zinc-900 dark:text-white">
+                      {formatINR(remainingAfterPayment)}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] font-medium">
+                    {willBeFullySettled ? (
+                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        This payment settles the balance in full and moves the note to Settled.
+                      </span>
+                    ) : (
+                      <span className="text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        This note will stay <strong>ACTIVE</strong> with ₹
+                        {remainingAfterPayment} remaining balance.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Payment Remark Input */}
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5 flex items-center gap-1">
+                  <Receipt className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Payment Remark / Note (Optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  placeholder="e.g. Paid in cash, GPay installment 1, Google Pay UTR..."
+                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+            </div>
+          )}
 
           {/* Auto convert to ledger transaction toggle */}
           {hasAmount && isKhata && accounts.length > 0 ? (
@@ -157,12 +386,12 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                   <div className="text-xs">
                     <span className="font-bold text-zinc-900 dark:text-white flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      Record automatically in Personal Bank Account
+                      Record transaction in Personal Bank Ledger
                     </span>
                     <p className="text-zinc-600 dark:text-zinc-400 text-[11px] mt-0.5 leading-relaxed">
                       {note.type === 'THEY_OWE_ME'
-                        ? 'Creates an Income credit in your selected bank balance.'
-                        : 'Creates an Expense debit from your selected bank balance.'}
+                        ? `Creates an Income credit of ${formatINR(settleMode === 'full' ? currentDue : numericSettle)} into chosen account.`
+                        : `Creates an Expense debit of ${formatINR(settleMode === 'full' ? currentDue : numericSettle)} from chosen account.`}
                     </p>
                   </div>
                 </label>
@@ -239,11 +468,17 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
             </button>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || (hasAmount && settleMode === 'partial' && numericSettle <= 0)}
               className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-5 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-600/20 transition-all disabled:opacity-50"
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isSubmitting ? 'Settling...' : 'Confirm & Settle'}</span>
+              <span>
+                {isSubmitting
+                  ? 'Saving...'
+                  : willBeFullySettled
+                  ? 'Confirm & Settle Full'
+                  : `Record Partial Payment (${formatINR(numericSettle)})`}
+              </span>
             </button>
           </div>
         </form>
