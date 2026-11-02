@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">SD Wallet logo</title>
+  <desc id="desc">A dark wallet icon with mint green and cyan accents, enclosed by a rounded teal gradient border. The area outside the border is transparent.</desc>
+  <defs>
+    <linearGradient id="frame" x1="18" y1="256" x2="494" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#12b98e"/>
+      <stop offset="1" stop-color="#08b6c9"/>
+    </linearGradient>
+    <linearGradient id="handle" x1="166" y1="138" x2="346" y2="138" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#31baf4"/>
+      <stop offset="1" stop-color="#25d0bb"/>
+    </linearGradient>
+    <linearGradient id="walletStroke" x1="108" y1="268" x2="404" y2="268" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#31d29a"/>
+      <stop offset="1" stop-color="#2bd39b"/>
+    </linearGradient>
+    <radialGradient id="inside" cx="256" cy="255" r="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#071a17"/>
+      <stop offset="1" stop-color="#08090b"/>
+    </radialGradient>
+    <linearGradient id="cardFill" x1="142" y1="290" x2="280" y2="345" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0d5545"/>
+      <stop offset="1" stop-color="#10483d"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Transparent outside the rounded frame; dark fill is confined inside it. -->
+  <rect x="28" y="28" width="456" height="456" rx="112" fill="url(#inside)"/>
+  <rect x="28" y="28" width="456" height="456" rx="112" fill="none" stroke="url(#frame)" stroke-width="18"/>
+
+  <!-- Wallet handle -->
+  <path d="M174 174V126c0-10 8-18 18-18h128c10 0 18 8 18 18v48" fill="#102d2b" stroke="url(#handle)" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M208 135h54" stroke="#2bc6dc" stroke-width="11" stroke-linecap="round"/>
+  <path d="M282 135h24" stroke="#ffbd22" stroke-width="11" stroke-linecap="round"/>
+
+  <!-- Main wallet body -->
+  <rect x="117" y="166" width="280" height="204" rx="45" fill="#102c29" stroke="url(#walletStroke)" stroke-width="15"/>
+  <path d="M127 216h260" fill="none" stroke="#16896c" stroke-width="7" stroke-linecap="round" stroke-dasharray="13 10" opacity=".9"/>
+  <circle cx="154" cy="191" r="9" fill="#08bd91"/>
+  <circle cx="182" cy="191" r="9" fill="#35baf4"/>
+
+  <!-- SD card panel -->
+  <rect x="143" y="240" width="137" height="102" rx="23" fill="url(#cardFill)" stroke="#167e65" stroke-width="5"/>
+  <rect x="148" y="245" width="127" height="92" rx="19" fill="none" stroke="#1a755e" stroke-width="3" opacity=".8"/>
+  <text x="211" y="319" text-anchor="middle" fill="#a3f4d1" font-family="Arial, Helvetica, sans-serif" font-size="80" font-weight="800" letter-spacing="-5">SD</text>
+
+  <!-- Front clasp / pocket -->
+  <rect x="264" y="234" width="143" height="81" rx="29" fill="#19191c" stroke="#2ed39a" stroke-width="14"/>
+  <circle cx="310" cy="274" r="17" fill="#f5a900"/>
+  <circle cx="310" cy="274" r="11" fill="#ffbd20"/>
+  <circle cx="310" cy="274" r="6" fill="#16191a"/>
+</svg>

@@ -1,13 +1,18 @@
 // SD-Ledger Progressive Web App Service Worker
-const CACHE_NAME = 'sd-ledger-cache-v2';
+const CACHE_NAME = 'sd-ledger-cache-v4';
 
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
+  '/favicon.ico',
+  '/favicon.svg',
+  '/icon.svg',
+  '/icons/icon.svg',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
+  '/icons/icon-maskable-192x192.png',
+  '/icons/icon-maskable-512x512.png',
   '/icons/apple-touch-icon.png',
-  '/icons/icon.svg',
 ];
 
 self.addEventListener('install', (event) => {
