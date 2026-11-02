@@ -43,38 +43,18 @@ async function buildAllIcons() {
     .toFile(path.join(iconsDir, 'apple-touch-icon.png'));
   console.log('✓ Generated public/icons/apple-touch-icon.png (180x180)');
 
-  // 3. Generate maskable PNGs (safe zone with #09090b background)
-  const maskable512Inner = await sharp(svgBuffer)
-    .resize(420, 420)
-    .toBuffer();
-  await sharp({
-    create: {
-      width: 512,
-      height: 512,
-      channels: 4,
-      background: { r: 9, g: 9, b: 11, alpha: 1 },
-    },
-  })
-    .composite([{ input: maskable512Inner, top: 46, left: 46 }])
+  // 3. Generate maskable PNGs directly from SVG without square opaque background
+  await sharp(svgBuffer)
+    .resize(512, 512)
     .png({ compressionLevel: 9 })
     .toFile(path.join(iconsDir, 'icon-maskable-512x512.png'));
-  console.log('✓ Generated public/icons/icon-maskable-512x512.png (maskable safe zone)');
+  console.log('✓ Generated public/icons/icon-maskable-512x512.png (transparent corners)');
 
-  const maskable192Inner = await sharp(svgBuffer)
-    .resize(158, 158)
-    .toBuffer();
-  await sharp({
-    create: {
-      width: 192,
-      height: 192,
-      channels: 4,
-      background: { r: 9, g: 9, b: 11, alpha: 1 },
-    },
-  })
-    .composite([{ input: maskable192Inner, top: 17, left: 17 }])
+  await sharp(svgBuffer)
+    .resize(192, 192)
     .png({ compressionLevel: 9 })
     .toFile(path.join(iconsDir, 'icon-maskable-192x192.png'));
-  console.log('✓ Generated public/icons/icon-maskable-192x192.png (maskable safe zone)');
+  console.log('✓ Generated public/icons/icon-maskable-192x192.png (transparent corners)');
 
   // 4. Generate multi-resolution ICO for app/favicon.ico and public/favicon.ico
   const png16 = await sharp(svgBuffer).resize(16, 16).png().toBuffer();
