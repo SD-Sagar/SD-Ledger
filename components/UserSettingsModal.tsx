@@ -16,6 +16,9 @@ import {
 } from 'lucide-react';
 import { getStoredUpiSettings, saveStoredUpiSettings, buildUpiPayUri } from '../lib/utils/upi';
 import { useAuth } from '../context/AuthContext';
+import { useLedger } from '../context/LedgerContext';
+import { getSupabase } from '../lib/supabase/client';
+import { DEMO_USER_ID } from '../lib/constants';
 
 interface UserSettingsModalProps {
   isOpen: boolean;
@@ -24,6 +27,7 @@ interface UserSettingsModalProps {
 
 export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   const { user } = useAuth();
+  const { linkedCloudUserId } = useLedger();
 
   const [payeeName, setPayeeName] = useState('Sagar Dey');
   const [upiId, setUpiId] = useState('');
@@ -38,8 +42,34 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       setUpiId(stored.upiId || '');
       setSaveSuccess(false);
       setHasCopied(false);
+
+      // If local UPI ID is not set yet, attempt to fetch from user_profiles table in Supabase
+      const fetchCloudUpi = async () => {
+        const supabase = getSupabase();
+        const effectiveUid = user && user.id !== DEMO_USER_ID ? user.id : linkedCloudUserId;
+        if (supabase && effectiveUid && !stored.upiId && navigator.onLine) {
+          try {
+            const { data } = await supabase
+              .from('user_profiles')
+              .select('upi_id, full_name')
+              .eq('id', effectiveUid)
+              .maybeSingle();
+            if (data?.upi_id) {
+              setUpiId(data.upi_id);
+              if (data.full_name) setPayeeName(data.full_name);
+              saveStoredUpiSettings({
+                upiId: data.upi_id,
+                payeeName: data.full_name || stored.payeeName || 'Sagar Dey',
+              });
+            }
+          } catch {
+            // ignore
+          }
+        }
+      };
+      fetchCloudUpi();
     }
-  }, [isOpen, user]);
+  }, [isOpen, user, linkedCloudUserId]);
 
   // Generate dynamic QR preview whenever UPI ID changes
   useEffect(() => {
@@ -80,12 +110,34 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
   const isValidUpi = upiId.trim().length >= 4 && upiId.includes('@');
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanPayee = payeeName.trim() || user?.fullName || 'Sagar Dey';
+    const cleanUpi = upiId.trim();
+
+    // 1. Save to local storage for offline instant availability
     saveStoredUpiSettings({
-      payeeName: payeeName.trim() || 'Sagar Dey',
-      upiId: upiId.trim(),
+      payeeName: cleanPayee,
+      upiId: cleanUpi,
     });
+
+    // 2. Persist to Supabase database (user_profiles) if authenticated
+    const supabase = getSupabase();
+    const effectiveUid = user && user.id !== DEMO_USER_ID ? user.id : linkedCloudUserId;
+    if (supabase && effectiveUid && navigator.onLine) {
+      try {
+        await supabase.from('user_profiles').upsert({
+          id: effectiveUid,
+          email: user?.email || '',
+          full_name: cleanPayee,
+          upi_id: cleanUpi,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' });
+      } catch (dbErr) {
+        console.warn('Could not update UPI in user_profiles database:', dbErr);
+      }
+    }
+
     setSaveSuccess(true);
     setTimeout(() => {
       setSaveSuccess(false);

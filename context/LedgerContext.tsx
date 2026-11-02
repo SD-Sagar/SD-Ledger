@@ -61,6 +61,7 @@ import {
   RESOLVED_NOTES_RETENTION_DAYS,
   TRANSACTION_HISTORY_MONTHS_LIMIT,
 } from '../lib/constants';
+import { getStoredUpiSettings, saveStoredUpiSettings } from '../lib/utils/upi';
 
 interface LedgerContextType {
   accounts: Account[];
@@ -632,6 +633,27 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     setSyncStatus((prev) => ({ ...prev, isSyncing: true }));
     try {
       await refreshData(DEMO_USER_ID);
+
+      // Also pull latest UPI settings from cloud
+      const supabase = getSupabase();
+      if (supabase && targetUid) {
+        try {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('upi_id, full_name')
+            .eq('id', targetUid)
+            .maybeSingle();
+          if (profile?.upi_id) {
+            saveStoredUpiSettings({
+              upiId: profile.upi_id,
+              payeeName: profile.full_name || 'Sagar Dey',
+            });
+          }
+        } catch {
+          // non-blocking
+        }
+      }
+
       setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
       const msg = `Successfully pulled latest cloud records from ${linkedCloudAccount || 'cloud'}!`;
       setSyncMessage(msg);
@@ -794,6 +816,21 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }, 'upsert');
       }
 
+      // 7. Sync UPI Settings to cloud user_profiles
+      try {
+        const upiSettings = getStoredUpiSettings();
+        if (upiSettings.upiId) {
+          await supabase.from('user_profiles').upsert({
+            id: effectiveUid,
+            full_name: upiSettings.payeeName,
+            upi_id: upiSettings.upiId,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+        }
+      } catch (upiErr) {
+        console.warn('Could not sync UPI settings to cloud in pushLocalDataToCloud:', upiErr);
+      }
+
       await refreshData(effectiveUid);
       setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
       const msg = `Successfully uploaded ${pushed} transactions and notes to Supabase Cloud!`;
@@ -855,6 +892,22 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('sd_ledger_offline_changes_made', 'false');
       }
       await refreshData(DEMO_USER_ID);
+
+      // Sync latest UPI settings to cloud user_profiles
+      try {
+        const upiSettings = getStoredUpiSettings();
+        if (upiSettings.upiId && supabase) {
+          await supabase.from('user_profiles').upsert({
+            id: targetUid,
+            full_name: upiSettings.payeeName,
+            upi_id: upiSettings.upiId,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'id' });
+        }
+      } catch (upiErr) {
+        console.warn('Could not sync UPI settings in uploadOfflineToCloud:', upiErr);
+      }
+
       const successMsg = `Successfully uploaded offline changes to ${linkedCloudAccount || 'cloud'}!`;
       setSyncMessage(successMsg);
       setTimeout(() => setSyncMessage(null), 5000);

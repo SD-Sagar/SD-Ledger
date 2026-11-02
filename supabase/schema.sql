@@ -327,9 +327,12 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     full_name TEXT,
     role TEXT NOT NULL DEFAULT 'user',
     is_blocked BOOLEAN NOT NULL DEFAULT false,
+    upi_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS upi_id TEXT;
 
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 
