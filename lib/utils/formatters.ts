@@ -1,5 +1,5 @@
 import { APP_TIMEZONE } from '../constants';
-import { Transaction, Account } from '../types';
+import { Transaction, Account, FinancialNote } from '../types';
 
 /**
  * Format a number as Indian Currency (INR, ₹)
@@ -167,6 +167,43 @@ export function exportTransactionsToCSV(
       `"${t.category || ''}"`,
       `"${desc}"`,
       t.created_at,
+    ].join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\n');
+}
+
+/**
+ * Generate CSV text from financial notes and friend dues
+ */
+export function exportNotesToCSV(notes: FinancialNote[]): string {
+  const headers = [
+    'Note ID',
+    'Title / Friend Name',
+    'Type',
+    'Current Amount (INR)',
+    'Original Amount (INR)',
+    'Phone Number',
+    'Due Date',
+    'Status',
+    'Resolved At',
+    'Description',
+    'Created At',
+  ];
+
+  const rows = notes.map((n) => {
+    return [
+      `"${n.id}"`,
+      `"${(n.title || '').replace(/"/g, '""')}"`,
+      `"${n.type}"`,
+      n.amount != null ? n.amount.toFixed(2) : '0.00',
+      n.original_amount != null ? n.original_amount.toFixed(2) : (n.amount != null ? n.amount.toFixed(2) : '0.00'),
+      `"${n.phone_number || ''}"`,
+      `"${n.due_date || ''}"`,
+      n.is_resolved ? '"Resolved"' : '"Active / Pending"',
+      `"${n.resolved_at || ''}"`,
+      `"${(n.description || '').replace(/"/g, '""')}"`,
+      `"${n.created_at}"`,
     ].join(',');
   });
 

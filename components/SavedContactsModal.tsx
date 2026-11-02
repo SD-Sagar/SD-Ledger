@@ -16,11 +16,16 @@ import {
   StickyNote,
 } from 'lucide-react';
 import { SavedContact } from '../lib/types';
+import { useAuth } from '../context/AuthContext';
+import { useLedger } from '../context/LedgerContext';
+import { DEMO_USER_ID } from '../lib/constants';
 import {
   getSavedContacts,
   saveOrUpdateContact,
   deleteSavedContact,
   updateSavedContact,
+  pushContactsToSupabase,
+  deleteContactFromSupabase,
 } from '../lib/utils/contacts';
 
 interface SavedContactsModalProps {
@@ -34,6 +39,10 @@ export function SavedContactsModal({
   onClose,
   onSelectContactForNote,
 }: SavedContactsModalProps) {
+  const { user } = useAuth();
+  const { linkedCloudUserId } = useLedger();
+  const effectiveUid = user?.id && user.id !== DEMO_USER_ID ? user.id : (linkedCloudUserId || undefined);
+
   const [contacts, setContacts] = useState<SavedContact[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isAdding, setIsAdding] = useState(false);
@@ -119,6 +128,10 @@ export function SavedContactsModal({
       saveOrUpdateContact(cleanName, cleanDigits);
     }
 
+    if (effectiveUid) {
+      pushContactsToSupabase(effectiveUid).catch(console.warn);
+    }
+
     reloadContacts();
     handleCancelForm();
   };
@@ -126,6 +139,9 @@ export function SavedContactsModal({
   const handleDelete = (id: string, name: string) => {
     if (window.confirm(`Delete "${name}" from saved contacts?`)) {
       deleteSavedContact(id);
+      if (effectiveUid) {
+        deleteContactFromSupabase(effectiveUid, id).catch(console.warn);
+      }
       reloadContacts();
     }
   };

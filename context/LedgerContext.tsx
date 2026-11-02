@@ -53,6 +53,7 @@ import {
   getSixMonthsAgoKolkata,
   getCurrentTimeKolkata,
   exportTransactionsToCSV,
+  exportNotesToCSV,
   downloadFile,
 } from '../lib/utils/formatters';
 import {
@@ -62,6 +63,14 @@ import {
   TRANSACTION_HISTORY_MONTHS_LIMIT,
 } from '../lib/constants';
 import { getStoredUpiSettings, saveStoredUpiSettings } from '../lib/utils/upi';
+import {
+  pushContactsToSupabase,
+  pullContactsFromSupabase,
+  getSavedContacts,
+  setSavedContacts,
+  seedContactsFromNotes,
+  saveOrUpdateContact,
+} from '../lib/utils/contacts';
 
 interface LedgerContextType {
   accounts: Account[];
@@ -190,6 +199,7 @@ interface LedgerContextType {
 
   triggerSync: () => Promise<SyncResult>;
   exportCSV: () => void;
+  exportNotesCSV: () => void;
   exportJSON: () => Promise<void>;
   restoreJSON: (jsonStr: string) => Promise<{ success: boolean; error?: string }>;
 }
@@ -437,6 +447,24 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
           if (notesRes.data || localNotes.length > 0) {
             await idbSaveNotes(Array.from(remoteNoteMap.values()));
           }
+
+          // Automatically pull cloud contacts & UPI settings into local state for this device
+          try {
+            await pullContactsFromSupabase(uid);
+            const { data: profile } = await supabase
+              .from('user_profiles')
+              .select('upi_id, full_name')
+              .eq('id', uid)
+              .maybeSingle();
+            if (profile?.upi_id) {
+              saveStoredUpiSettings({
+                upiId: profile.upi_id,
+                payeeName: profile.full_name || 'Sagar Dey',
+              });
+            }
+          } catch (profileErr) {
+            console.warn('Could not sync user profile/contacts in refreshData:', profileErr);
+          }
         } catch (fetchErr) {
           console.warn('Could not fetch cloud data, falling back to local cache:', fetchErr);
         }
@@ -584,6 +612,24 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
               await idbSaveNotes(Array.from(mergedNotes.values()));
             }
+
+            // Pull contacts & UPI for linked cloud user
+            try {
+              await pullContactsFromSupabase(linkedUid);
+              const { data: profile } = await supabase
+                .from('user_profiles')
+                .select('upi_id, full_name')
+                .eq('id', linkedUid)
+                .maybeSingle();
+              if (profile?.upi_id) {
+                saveStoredUpiSettings({
+                  upiId: profile.upi_id,
+                  payeeName: profile.full_name || 'Sagar Dey',
+                });
+              }
+            } catch {
+              // non-blocking
+            }
           } catch (offlinePullErr) {
             console.warn('Could not auto-pull latest cloud data for offline mode, using cached IndexedDB:', offlinePullErr);
           }
@@ -638,6 +684,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       const supabase = getSupabase();
       if (supabase && targetUid) {
         try {
+          await pullContactsFromSupabase(targetUid);
           const { data: profile } = await supabase
             .from('user_profiles')
             .select('upi_id, full_name')
@@ -831,6 +878,13 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         console.warn('Could not sync UPI settings to cloud in pushLocalDataToCloud:', upiErr);
       }
 
+      // 8. Sync Saved Contacts to cloud
+      try {
+        await pushContactsToSupabase(effectiveUid);
+      } catch (contactsErr) {
+        console.warn('Could not sync contacts to cloud in pushLocalDataToCloud:', contactsErr);
+      }
+
       await refreshData(effectiveUid);
       setSyncStatus((prev) => ({ ...prev, isSyncing: false }));
       const msg = `Successfully uploaded ${pushed} transactions and notes to Supabase Cloud!`;
@@ -906,6 +960,13 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         }
       } catch (upiErr) {
         console.warn('Could not sync UPI settings in uploadOfflineToCloud:', upiErr);
+      }
+
+      // Sync contacts to cloud
+      try {
+        await pushContactsToSupabase(targetUid);
+      } catch (contactsErr) {
+        console.warn('Could not sync contacts in uploadOfflineToCloud:', contactsErr);
       }
 
       const successMsg = `Successfully uploaded offline changes to ${linkedCloudAccount || 'cloud'}!`;
@@ -1880,6 +1941,13 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     downloadFile(csv, `SD-Ledger-Transactions-${dateStr}.csv`, 'text/csv');
   };
 
+  // Export Notes / Dues CSV
+  const exportNotesCSV = () => {
+    const csv = exportNotesToCSV(notes);
+    const dateStr = getTodayKolkata();
+    downloadFile(csv, `SD-Ledger-Notes-Dues-${dateStr}.csv`, 'text/csv');
+  };
+
   // Export JSON Backup
   const exportJSON = async () => {
     if (!userId) return;
@@ -1908,6 +1976,13 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       });
 
       await refreshData(userId);
+
+      // If online and authenticated or linked, push restored data to cloud so Supabase is 100% updated immediately
+      const effectiveUid = userId !== DEMO_USER_ID ? userId : (linkedCloudUserId || undefined);
+      if (navigator.onLine && effectiveUid) {
+        pushLocalDataToCloud().catch((err) => console.warn('Could not auto-sync restored backup to cloud:', err));
+      }
+
       return { success: true };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid JSON file format';
@@ -1980,6 +2055,18 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       created_at: nowIso,
     });
 
+    // Auto-save contact if phone number provided and push to Supabase
+    if (note.phone_number?.trim()) {
+      const friendCandidate = note.title.split(/[-–—:(]/)[0].trim();
+      if (friendCandidate) {
+        saveOrUpdateContact(friendCandidate, note.phone_number);
+        const effectiveUid = userId !== DEMO_USER_ID ? userId : (linkedCloudUserId || undefined);
+        if (effectiveUid) {
+          pushContactsToSupabase(effectiveUid).catch(console.warn);
+        }
+      }
+    }
+
     await refreshData(userId);
     return { success: true, note };
   };
@@ -2022,6 +2109,18 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       details: { note },
       created_at: nowIso,
     });
+
+    // Auto-save contact if phone number provided and push to Supabase
+    if (note.phone_number?.trim()) {
+      const friendCandidate = note.title.split(/[-–—:(]/)[0].trim();
+      if (friendCandidate) {
+        saveOrUpdateContact(friendCandidate, note.phone_number);
+        const effectiveUid = userId !== DEMO_USER_ID ? userId : (linkedCloudUserId || undefined);
+        if (effectiveUid) {
+          pushContactsToSupabase(effectiveUid).catch(console.warn);
+        }
+      }
+    }
 
     await refreshData(userId);
     return { success: true };
@@ -2290,6 +2389,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         reopenNote,
         triggerSync,
         exportCSV,
+        exportNotesCSV,
         exportJSON,
         restoreJSON,
       }}

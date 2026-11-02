@@ -332,7 +332,37 @@ CREATE TABLE IF NOT EXISTS public.user_profiles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
+-- Extended columns on financial_notes for WhatsApp reminders & partial settlements
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS phone_number TEXT;
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS original_amount NUMERIC(15,2);
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS payment_history JSONB;
+
+-- Extended columns on user_profiles for UPI and contacts
 ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS upi_id TEXT;
+ALTER TABLE public.user_profiles ADD COLUMN IF NOT EXISTS saved_contacts JSONB;
+
+-- ==============================================================================
+-- 6. USER SAVED CONTACTS (CROSS-DEVICE CLOUD SYNC)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.user_contacts (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.user_contacts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own contacts" ON public.user_contacts;
+CREATE POLICY "Users can manage own contacts"
+ON public.user_contacts
+FOR ALL
+USING (auth.uid() = user_id)
+WITH CHECK (auth.uid() = user_id);
+
 
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 

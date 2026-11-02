@@ -21,7 +21,7 @@ import { useLedger } from '../context/LedgerContext';
 import { FinancialNote, SavedContact } from '../lib/types';
 import { formatINR, formatDisplayDate } from '../lib/utils/formatters';
 import { getStoredUpiSettings, buildUpiPayUri } from '../lib/utils/upi';
-import { getSavedContacts, saveOrUpdateContact } from '../lib/utils/contacts';
+import { getSavedContacts, saveOrUpdateContact, pushContactsToSupabase } from '../lib/utils/contacts';
 
 interface WhatsAppNudgeModalProps {
   isOpen: boolean;
@@ -274,9 +274,12 @@ Thank you!`;
         }
       }
 
-      // 2. Save into saved contacts directory
+      // 2. Save into saved contacts directory & sync to Supabase
       if (friendName && friendName !== 'Friend' && cleanDigits) {
         saveOrUpdateContact(friendName, cleanDigits);
+        if (note?.user_id) {
+          pushContactsToSupabase(note.user_id).catch(console.warn);
+        }
       }
     }, 400);
   };

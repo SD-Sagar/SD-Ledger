@@ -1,5 +1,5 @@
 // SD-Ledger Progressive Web App Service Worker
-const CACHE_NAME = 'sd-ledger-cache-v1';
+const CACHE_NAME = 'sd-ledger-cache-v2';
 
 const STATIC_ASSETS = [
   '/',

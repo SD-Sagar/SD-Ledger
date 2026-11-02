@@ -1,4 +1,5 @@
 import { SavedContact, FinancialNote } from '../types';
+import { getSupabase } from '../supabase/client';
 
 const STORAGE_KEY = 'sd_saved_contacts';
 
@@ -134,4 +135,125 @@ export function seedContactsFromNotes(notes: FinancialNote[]): void {
     setSavedContacts([...current, ...newContacts]);
   }
 }
+
+/**
+ * Push all saved contacts from localStorage into Supabase cloud (user_contacts table & user_profiles.saved_contacts)
+ */
+export async function pushContactsToSupabase(userId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !userId || !navigator.onLine) return;
+  const contacts = getSavedContacts();
+  if (!contacts || contacts.length === 0) return;
+
+  // 1. Upsert into public.user_contacts table
+  try {
+    for (const c of contacts) {
+      await supabase.from('user_contacts').upsert({
+        id: c.id,
+        user_id: userId,
+        name: c.name,
+        phone: c.phone,
+        created_at: c.created_at || new Date().toISOString(),
+        updated_at: c.updated_at || new Date().toISOString(),
+      }, { onConflict: 'id' });
+    }
+  } catch (err) {
+    console.warn('Could not upsert into user_contacts table:', err);
+  }
+
+  // 2. Also save into user_profiles.saved_contacts as resilience fallback
+  try {
+    await supabase.from('user_profiles').upsert({
+      id: userId,
+      saved_contacts: contacts,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.warn('Could not save contacts to user_profiles:', err);
+  }
+}
+
+/**
+ * Pull all saved contacts from Supabase cloud into localStorage
+ */
+export async function pullContactsFromSupabase(userId: string): Promise<SavedContact[]> {
+  const supabase = getSupabase();
+  if (!supabase || !userId || !navigator.onLine) return getSavedContacts();
+
+  let remoteContacts: SavedContact[] = [];
+
+  // Try user_contacts table first
+  try {
+    const { data, error } = await supabase
+      .from('user_contacts')
+      .select('*')
+      .eq('user_id', userId);
+    if (!error && Array.isArray(data) && data.length > 0) {
+      remoteContacts = data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        phone: d.phone,
+        created_at: d.created_at,
+        updated_at: d.updated_at,
+      }));
+    }
+  } catch {
+    // non-blocking
+  }
+
+  // Fallback to user_profiles.saved_contacts
+  if (remoteContacts.length === 0) {
+    try {
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('saved_contacts')
+        .eq('id', userId)
+        .maybeSingle();
+      if (!error && data?.saved_contacts && Array.isArray(data.saved_contacts)) {
+        remoteContacts = data.saved_contacts;
+      }
+    } catch {
+      // non-blocking
+    }
+  }
+
+  if (remoteContacts.length > 0) {
+    const local = getSavedContacts();
+    const map = new Map<string, SavedContact>();
+    remoteContacts.forEach((c) => map.set(c.phone, c));
+    local.forEach((c) => {
+      if (!map.has(c.phone)) map.set(c.phone, c);
+    });
+    const merged = Array.from(map.values());
+    setSavedContacts(merged);
+    return merged;
+  }
+
+  return getSavedContacts();
+}
+
+/**
+ * Delete contact from Supabase cloud (user_contacts table & user_profiles.saved_contacts)
+ */
+export async function deleteContactFromSupabase(userId: string, contactId: string): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase || !userId || !navigator.onLine) return;
+  try {
+    await supabase.from('user_contacts').delete().eq('id', contactId).eq('user_id', userId);
+  } catch (err) {
+    console.warn('Could not delete contact from user_contacts table:', err);
+  }
+
+  try {
+    const remaining = getSavedContacts();
+    await supabase.from('user_profiles').upsert({
+      id: userId,
+      saved_contacts: remaining,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+  } catch (err) {
+    console.warn('Could not update saved_contacts on user_profiles after delete:', err);
+  }
+}
+
 

@@ -1,4 +1,6 @@
-import { Account, Transaction, Reconciliation, AuditLog, FinancialNote, SyncQueueItem } from '../types';
+import { Account, Transaction, Reconciliation, AuditLog, FinancialNote, SyncQueueItem, SavedContact, UserUpiSettings } from '../types';
+import { getSavedContacts, setSavedContacts } from '../utils/contacts';
+import { getStoredUpiSettings, saveStoredUpiSettings } from '../utils/upi';
 
 const DB_NAME = 'SD_Ledger_DB';
 const DB_VERSION = 2;
@@ -564,6 +566,8 @@ export interface FullDatabaseBackup {
   reconciliations: Reconciliation[];
   auditLogs: AuditLog[];
   notes?: FinancialNote[];
+  contacts?: SavedContact[];
+  upiSettings?: UserUpiSettings;
 }
 
 export async function idbExportDatabase(userId: string): Promise<FullDatabaseBackup> {
@@ -585,12 +589,24 @@ export async function idbExportDatabase(userId: string): Promise<FullDatabaseBac
     reconciliations,
     auditLogs,
     notes,
+    contacts: getSavedContacts(),
+    upiSettings: getStoredUpiSettings(),
   };
 }
 
 export async function idbRestoreDatabase(userId: string, backup: FullDatabaseBackup): Promise<void> {
   if (!backup || !Array.isArray(backup.accounts) || !Array.isArray(backup.transactions)) {
     throw new Error('Invalid SD-Ledger backup file format.');
+  }
+
+  // Restore saved contacts if included in backup
+  if (Array.isArray(backup.contacts) && backup.contacts.length > 0) {
+    setSavedContacts(backup.contacts);
+  }
+
+  // Restore UPI settings if included in backup
+  if (backup.upiSettings && backup.upiSettings.upiId) {
+    saveStoredUpiSettings(backup.upiSettings);
   }
 
   const db = await getDB();
