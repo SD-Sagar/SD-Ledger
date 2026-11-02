@@ -42,6 +42,7 @@ export const ACCOUNT_COLORS = [
 
 export const DEMO_USER_ID = '00000000-0000-0000-0000-000000000001';
 export const DEMO_USER_EMAIL = 'demo@sd-ledger.local';
+export const ADMIN_EMAIL = 'deysagar1999@gmail.com';
 
 // Storage & Optimization Limits
 export const MAX_AUDIT_TRAIL_LIMIT = 50; // Maximum chronological audit trail events retained/displayed

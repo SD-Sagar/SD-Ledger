@@ -119,15 +119,13 @@ function MainAppContent() {
               </div>
             </div>
           </div>
-        ) : needsSetupWizard ? (
-          <SetupWizard onOpenAuth={handleOpenAuth} />
         ) : (
           <Dashboard onOpenAuth={handleOpenAuth} />
         )}
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
-      {user && !needsSetupWizard && (
+      {user && (
         <MobileNavigation
           onOpenExpense={() => setShowMobileExpenseModal(true)}
           onOpenIncome={() => setShowMobileIncomeModal(true)}

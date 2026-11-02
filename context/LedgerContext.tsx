@@ -917,13 +917,8 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     };
   }, [userId, syncStatus.pendingCount]);
 
-  // In Offline mode: setup wizard is needed if 0 accounts have been imported yet.
-  // In Online mode: setup wizard is needed if fewer than 2 accounts exist.
-  const needsSetupWizard = isInitialized && (
-    userId === DEMO_USER_ID
-      ? accounts.length === 0
-      : accounts.length < 2
-  );
+  // User directly manages accounts through the single boilerplate card or Add Account modal
+  const needsSetupWizard = false;
 
   // Compute ledger summary
   const [currentMonth, setCurrentMonth] = useState('');

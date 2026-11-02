@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import { User, Session } from '@supabase/supabase-js';
 import { getSupabase, isSupabaseConfigured } from '../lib/supabase/client';
 import { UserProfile } from '../lib/types';
-import { DEMO_USER_ID, DEMO_USER_EMAIL } from '../lib/constants';
+import { DEMO_USER_ID, DEMO_USER_EMAIL, ADMIN_EMAIL } from '../lib/constants';
 
 interface AuthContextType {
   user: UserProfile | null;
@@ -58,12 +58,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Check if a user is blocked by the administrator
+  const isUserBlockedByAdmin = async (supabaseClient: ReturnType<typeof getSupabase>, authUser: User): Promise<boolean> => {
+    if (!supabaseClient) return false;
+    // Admin account can never be blocked
+    if (authUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()) return false;
+
+    if (authUser.user_metadata?.is_blocked === true) return true;
+
+    try {
+      const { data } = await supabaseClient
+        .from('user_profiles')
+        .select('is_blocked')
+        .eq('id', authUser.id)
+        .maybeSingle();
+      if (data?.is_blocked === true) return true;
+    } catch {
+      // non-blocking
+    }
+    return false;
+  };
+
   // Initialize Auth
   useEffect(() => {
     let mounted = true;
 
     async function initAuth() {
-      // Check if demo session was active
+      // Check if user was explicitly in offline mode
       if (typeof window !== 'undefined' && localStorage.getItem('sd_ledger_is_demo') === 'true') {
         continueAsDemo();
         setIsLoading(false);
@@ -72,8 +93,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const supabase = getSupabase();
       if (!supabase) {
-        // Fallback to demo mode if Supabase credentials are not provided
-        continueAsDemo();
+        // Without Supabase configured, show welcome page so user can choose to continue in offline mode
+        setUser(null);
         setIsLoading(false);
         return;
       }
@@ -86,18 +107,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (mounted) {
           if (initialSession?.user) {
-            setSession(initialSession);
-            setRawUser(initialSession.user);
-            setUser({
-              id: initialSession.user.id,
-              email: initialSession.user.email || '',
-              fullName: initialSession.user.user_metadata?.full_name || initialSession.user.email?.split('@')[0],
-              isEmailVerified: Boolean(initialSession.user.email_confirmed_at),
-            });
-            setIsDemoUser(false);
+            const blocked = await isUserBlockedByAdmin(supabase, initialSession.user);
+            if (blocked) {
+              await supabase.auth.signOut();
+              setSession(null);
+              setRawUser(null);
+              setUser(null);
+              setIsDemoUser(false);
+              setAuthError(`Admin has blocked this account. Please contact admin (${ADMIN_EMAIL}).`);
+            } else {
+              setSession(initialSession);
+              setRawUser(initialSession.user);
+              setUser({
+                id: initialSession.user.id,
+                email: initialSession.user.email || '',
+                fullName: initialSession.user.user_metadata?.full_name || initialSession.user.email?.split('@')[0],
+                isEmailVerified: Boolean(initialSession.user.email_confirmed_at),
+              });
+              setIsDemoUser(false);
+            }
           } else {
-            // No active session: fallback to demo mode so user can explore right away
-            continueAsDemo();
+            // No active session: keep user null so user sees the Welcome landing page (Picture 2) first
+            setSession(null);
+            setRawUser(null);
+            setUser(null);
+            setIsDemoUser(false);
           }
           setIsLoading(false);
         }
@@ -107,7 +141,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (!mounted) return;
             const isDemoActive = typeof window !== 'undefined' && localStorage.getItem('sd_ledger_is_demo') === 'true';
             if (isDemoActive) {
-              // User is explicitly in Offline Mode. Store session for background cloud upload/import, but keep demo profile active!
               if (newSession?.user) {
                 setSession(newSession);
                 setRawUser(newSession.user);
@@ -120,6 +153,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (newSession?.user) {
+              const blocked = await isUserBlockedByAdmin(supabase, newSession.user);
+              if (blocked) {
+                await supabase.auth.signOut();
+                setSession(null);
+                setRawUser(null);
+                setUser(null);
+                setIsDemoUser(false);
+                setAuthError(`Admin has blocked this account. Please contact admin (${ADMIN_EMAIL}).`);
+                return;
+              }
+
               setSession(newSession);
               setRawUser(newSession.user);
               setUser({
@@ -216,6 +260,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         setAuthError(error.message);
         return { success: false, error: error.message };
+      }
+
+      // Check if user is blocked by administrator
+      const isBlocked = await isUserBlockedByAdmin(supabase, data.user);
+      if (isBlocked) {
+        await supabase.auth.signOut();
+        const blockedMsg = `Admin has blocked this account. Please contact admin (${ADMIN_EMAIL}) for assistance.`;
+        setAuthError(blockedMsg);
+        return { success: false, error: blockedMsg };
       }
 
       if (typeof window !== 'undefined') {

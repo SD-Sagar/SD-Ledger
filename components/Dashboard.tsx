@@ -57,10 +57,54 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
     uploadOfflineToCloud,
     linkedCloudAccount,
     deleteAccount,
+    addAccount,
     syncMessage,
     clearSyncMessage,
   } = useLedger();
   const { isDemoUser } = useAuth();
+
+  // Boilerplate single account card state (for first-time/0-account users)
+  // CRITICAL: Inputs start empty with placeholders only; never auto-saved until user submits!
+  const [bpName, setBpName] = useState('');
+  const [bpBalance, setBpBalance] = useState('');
+  const [bpColor, setBpColor] = useState('#059669');
+  const [bpDate, setBpDate] = useState(() => getTodayKolkata());
+  const [bpSubmitting, setBpSubmitting] = useState(false);
+  const [bpError, setBpError] = useState<string | null>(null);
+
+  const handleCreateBoilerplateAccount = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!bpName.trim()) {
+      setBpError('Please enter an account name (e.g. HDFC Bank, SBI, Salary)');
+      return;
+    }
+    const balanceNum = bpBalance.trim() === '' ? 0 : parseFloat(bpBalance);
+    if (isNaN(balanceNum)) {
+      setBpError('Please enter a valid balance (e.g. 5000 or 0)');
+      return;
+    }
+
+    setBpSubmitting(true);
+    setBpError(null);
+    try {
+      const res = await addAccount({
+        name: bpName.trim(),
+        balance: balanceNum,
+        color: bpColor,
+        startDate: bpDate,
+      });
+      if (res && !res.success) {
+        setBpError(res.error || 'Failed to create account');
+      } else {
+        setBpName('');
+        setBpBalance('');
+      }
+    } catch (err: unknown) {
+      setBpError(err instanceof Error ? err.message : 'Failed to create account');
+    } finally {
+      setBpSubmitting(false);
+    }
+  };
 
   // Active view tab
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
@@ -404,6 +448,33 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
       {/* TAB 1: OVERVIEW & GROWW STOCK MARKET CHART */}
       {activeTab === 'overview' && (
         <div className="space-y-5 animate-in fade-in duration-200">
+          {/* WELCOME / SETUP PROMPT FOR 0 ACCOUNTS */}
+          {accounts.length === 0 && (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30 shadow-sm animate-in fade-in duration-200">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 shrink-0">
+                  <Wallet className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-zinc-900 dark:text-white">
+                    Welcome to SD-Ledger! Configure Your First Account
+                  </h4>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5 max-w-xl">
+                    Get started by setting up your first bank account. No dummy accounts are ever auto-saved until you provide details and confirm.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('accounts')}
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white shadow-md hover:shadow-emerald-500/20 transition-all cursor-pointer shrink-0"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Configure Account</span>
+              </button>
+            </div>
+          )}
+
           {/* SMART END-OF-MONTH FINANCIAL REPORT PROMPT */}
           {smartReportSuggestion && (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/30 shadow-sm animate-in fade-in duration-200">
@@ -780,6 +851,110 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
                 </span>
               </div>
             </div>
+
+            {/* SINGLE ACCOUNT BOILERPLATE CARD WITH PLUS ICON (ONLY PLACEHOLDERS, NEVER AUTO-SAVED) */}
+            {accounts.length === 0 && (
+              <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-emerald-400/80 dark:border-emerald-600/80 bg-white/95 dark:bg-zinc-950/95 p-5 shadow-xl transition-all md:col-span-2 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="h-4 w-4 rounded-full shrink-0 shadow-sm transition-colors ring-2 ring-emerald-500/30"
+                        style={{ backgroundColor: bpColor }}
+                      />
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight">
+                        Account Boilerplate
+                      </h4>
+                      <span className="rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold border border-emerald-500/30">
+                        Setup Boilerplate
+                      </span>
+                    </div>
+                    <span className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                      Inputs are placeholders only • Never saved until you click +
+                    </span>
+                  </div>
+
+                  <form onSubmit={handleCreateBoilerplateAccount} className="space-y-3.5 mt-2">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1">
+                        Bank / Account Name
+                      </label>
+                      <input
+                        type="text"
+                        value={bpName}
+                        onChange={(e) => {
+                          setBpName(e.target.value);
+                          if (bpError) setBpError(null);
+                        }}
+                        placeholder="e.g. HDFC Bank, SBI, Salary, Cash..."
+                        className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-medium"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1">
+                          Opening Balance
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">₹</span>
+                          <input
+                            type="number"
+                            step="any"
+                            value={bpBalance}
+                            onChange={(e) => {
+                              setBpBalance(e.target.value);
+                              if (bpError) setBpError(null);
+                            }}
+                            placeholder="0.00"
+                            className="w-full rounded-xl border border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 pl-8 pr-3.5 py-2 text-xs text-zinc-900 dark:text-white placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all font-mono font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-bold uppercase tracking-wider text-zinc-600 dark:text-zinc-300 mb-1">
+                          Account Color Theme
+                        </label>
+                        <div className="flex items-center gap-2 pt-1">
+                          {['#059669', '#2563eb', '#7c3aed', '#ea580c', '#0891b2', '#db2777'].map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => setBpColor(c)}
+                              className={`h-6 w-6 rounded-full transition-transform cursor-pointer ${
+                                bpColor === c ? 'scale-125 ring-2 ring-offset-2 ring-emerald-500' : 'hover:scale-110 opacity-70 hover:opacity-100'
+                              }`}
+                              style={{ backgroundColor: c }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {bpError && (
+                      <p className="text-[11px] text-rose-500 font-semibold bg-rose-500/10 border border-rose-500/20 px-3 py-1.5 rounded-lg">
+                        {bpError}
+                      </p>
+                    )}
+
+                    <div className="pt-2 flex items-center justify-between flex-wrap gap-2">
+                      <span className="text-[10px] text-zinc-400">
+                        Safe: Zero boilerplate data saved to cloud until manually added
+                      </span>
+                      <button
+                        type="submit"
+                        disabled={bpSubmitting}
+                        className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 px-4 py-2 text-xs font-bold text-white shadow-md hover:shadow-emerald-500/25 transition-all disabled:opacity-50 cursor-pointer"
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span>{bpSubmitting ? 'Saving...' : 'Add Account'}</span>
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* DYNAMIC COMPACT ACCOUNT CARDS (NO RAW UUIDS, SLEEK FINTECH DESIGN) */}
             {summary.accounts.map((accSummary, idx) => (

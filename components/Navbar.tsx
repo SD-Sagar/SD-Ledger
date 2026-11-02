@@ -20,11 +20,13 @@ import {
   MoreVertical,
   Calculator,
   Settings,
+  ShieldAlert,
 } from 'lucide-react';
-import { DEMO_USER_ID } from '../lib/constants';
+import { DEMO_USER_ID, ADMIN_EMAIL } from '../lib/constants';
 import { BrandLogo } from './BrandLogo';
 import { NotificationCenter } from './NotificationCenter';
 import { UserSettingsModal } from './UserSettingsModal';
+import { AdminUsersModal } from './AdminUsersModal';
 
 interface NavbarProps {
   onOpenAuth: (prompt?: string) => void;
@@ -56,9 +58,12 @@ export function Navbar({
   const [clearDataOnSwitch, setClearDataOnSwitch] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAdminModal, setShowAdminModal] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isPulling, setIsPulling] = useState(false);
   const [isPushingCloud, setIsPushingCloud] = useState(false);
+
+  const isAdmin = user?.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
 
   const menuRef = useRef<HTMLDivElement>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -156,85 +161,90 @@ export function Navbar({
 
           {/* Navigation Action Tools & Controls */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {/* OFFLINE MODE: Linked Cloud Badge with Live Sync & Upload Buttons */}
-            {isDemoUser && (
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                {/* Linked Cloud Account Badge + Quick Live Sync */}
-                <div
-                  className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-cyan-300/80 dark:border-cyan-800/80 bg-cyan-50/90 dark:bg-cyan-950/60 p-1 sm:px-2.5 sm:py-1 text-xs font-medium text-cyan-800 dark:text-cyan-300 shadow-sm"
-                  title={linkedCloudAccount ? `Linked Cloud: ${linkedCloudAccount}. Click Live Sync to pull latest cloud records.` : 'No cloud account linked yet'}
-                >
-                  <Database className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0 hidden sm:inline" />
-                  <span className="hidden sm:inline max-w-[130px] truncate text-[11px] font-medium">
-                    {linkedCloudAccount ? linkedCloudAccount : 'No Cloud'}
-                  </span>
+            {/* Logged-in only tools & sync controls */}
+            {user && (
+              <>
+                {/* OFFLINE MODE: Linked Cloud Badge with Live Sync & Upload Buttons */}
+                {isDemoUser && (
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    {/* Linked Cloud Account Badge + Quick Live Sync */}
+                    <div
+                      className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-cyan-300/80 dark:border-cyan-800/80 bg-cyan-50/90 dark:bg-cyan-950/60 p-1 sm:px-2.5 sm:py-1 text-xs font-medium text-cyan-800 dark:text-cyan-300 shadow-sm"
+                      title={linkedCloudAccount ? `Linked Cloud: ${linkedCloudAccount}. Click Live Sync to pull latest cloud records.` : 'No cloud account linked yet'}
+                    >
+                      <Database className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-cyan-600 dark:text-cyan-400 shrink-0 hidden sm:inline" />
+                      <span className="hidden sm:inline max-w-[130px] truncate text-[11px] font-medium">
+                        {linkedCloudAccount ? linkedCloudAccount : 'No Cloud'}
+                      </span>
 
-                  {/* Live Sync / Pull latest button */}
-                  <button
-                    type="button"
-                    onClick={handlePullClick}
-                    disabled={isPulling || syncStatus.isSyncing}
-                    title="Live Sync: Pull latest updated data from cloud"
-                    className="flex items-center gap-1 rounded-lg bg-cyan-200/60 dark:bg-cyan-900/60 px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold text-cyan-900 dark:text-cyan-200 hover:bg-cyan-300/60 dark:hover:bg-cyan-800/60 transition-colors disabled:opacity-50"
-                  >
-                    <CloudDownload className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${isPulling ? 'animate-bounce text-cyan-600 dark:text-cyan-300' : ''}`} />
-                    <span className="hidden sm:inline">{isPulling ? 'Pulling...' : 'Live Sync'}</span>
-                  </button>
-                </div>
+                      {/* Live Sync / Pull latest button */}
+                      <button
+                        type="button"
+                        onClick={handlePullClick}
+                        disabled={isPulling || syncStatus.isSyncing}
+                        title="Live Sync: Pull latest updated data from cloud"
+                        className="flex items-center gap-1 rounded-lg bg-cyan-200/60 dark:bg-cyan-900/60 px-1.5 py-0.5 text-[10px] sm:text-xs font-semibold text-cyan-900 dark:text-cyan-200 hover:bg-cyan-300/60 dark:hover:bg-cyan-800/60 transition-colors disabled:opacity-50"
+                      >
+                        <CloudDownload className={`h-3 w-3 sm:h-3.5 sm:w-3.5 ${isPulling ? 'animate-bounce text-cyan-600 dark:text-cyan-300' : ''}`} />
+                        <span className="hidden sm:inline">{isPulling ? 'Pulling...' : 'Live Sync'}</span>
+                      </button>
+                    </div>
 
-                {/* Upload to Cloud Button */}
-                <button
-                  onClick={handleUploadClick}
-                  disabled={syncStatus.isSyncing}
-                  title={
-                    syncStatus.pendingCount > 0
-                      ? `${syncStatus.pendingCount} pending offline changes. Click to upload to cloud.`
-                      : 'Upload offline changes to linked cloud account'
-                  }
-                  className="flex items-center gap-1 sm:gap-1.5 rounded-xl bg-emerald-600 px-2 sm:px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors disabled:opacity-50"
-                >
-                  <CloudUpload
-                    className={`h-3.5 w-3.5 ${syncStatus.isSyncing ? 'animate-spin' : ''}`}
-                  />
-                  <span className="hidden sm:inline">
-                    {syncStatus.isSyncing
-                      ? 'Uploading...'
-                      : syncStatus.pendingCount > 0
-                      ? `Upload (${syncStatus.pendingCount})`
-                      : 'Upload'}
-                  </span>
-                  {syncStatus.pendingCount > 0 && (
-                    <span className="sm:hidden text-[10px] bg-emerald-800 px-1.5 py-0.2 rounded-full font-mono">
-                      {syncStatus.pendingCount}
-                    </span>
-                  )}
-                </button>
-              </div>
+                    {/* Upload to Cloud Button */}
+                    <button
+                      onClick={handleUploadClick}
+                      disabled={syncStatus.isSyncing}
+                      title={
+                        syncStatus.pendingCount > 0
+                          ? `${syncStatus.pendingCount} pending offline changes. Click to upload to cloud.`
+                          : 'Upload offline changes to linked cloud account'
+                      }
+                      className="flex items-center gap-1 sm:gap-1.5 rounded-xl bg-emerald-600 px-2 sm:px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-500 transition-colors disabled:opacity-50"
+                    >
+                      <CloudUpload
+                        className={`h-3.5 w-3.5 ${syncStatus.isSyncing ? 'animate-spin' : ''}`}
+                      />
+                      <span className="hidden sm:inline">
+                        {syncStatus.isSyncing
+                          ? 'Uploading...'
+                          : syncStatus.pendingCount > 0
+                          ? `Upload (${syncStatus.pendingCount})`
+                          : 'Upload'}
+                      </span>
+                      {syncStatus.pendingCount > 0 && (
+                        <span className="sm:hidden text-[10px] bg-emerald-800 px-1.5 py-0.2 rounded-full font-mono">
+                          {syncStatus.pendingCount}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Online mode: Push Localhost Data to Cloud Button */}
+                {!isDemoUser && (
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    <button
+                      type="button"
+                      onClick={handlePushClick}
+                      disabled={isPushingCloud}
+                      title="Push localhost ledger data directly to Supabase Cloud"
+                      className="flex items-center gap-1 sm:gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
+                    >
+                      <CloudUpload className={`h-3.5 w-3.5 ${isPushingCloud ? 'animate-spin' : ''}`} />
+                      <span className="hidden sm:inline">{isPushingCloud ? 'Pushing...' : 'Push to Cloud'}</span>
+                    </button>
+
+                    <div className="hidden lg:flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-950/60 dark:bg-emerald-950/30 dark:text-emerald-400">
+                      <Wifi className="h-3.5 w-3.5" />
+                      <span>Online Engine</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 48-Hour Financial Radar Notifications Center */}
+                <NotificationCenter />
+              </>
             )}
-
-            {/* Online mode: Push Localhost Data to Cloud Button */}
-            {!isDemoUser && (
-              <div className="flex items-center gap-1 sm:gap-1.5">
-                <button
-                  type="button"
-                  onClick={handlePushClick}
-                  disabled={isPushingCloud}
-                  title="Push localhost ledger data directly to Supabase Cloud"
-                  className="flex items-center gap-1 sm:gap-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 px-2.5 sm:px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors disabled:opacity-50"
-                >
-                  <CloudUpload className={`h-3.5 w-3.5 ${isPushingCloud ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">{isPushingCloud ? 'Pushing...' : 'Push to Cloud'}</span>
-                </button>
-
-                <div className="hidden lg:flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium border border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-950/60 dark:bg-emerald-950/30 dark:text-emerald-400">
-                  <Wifi className="h-3.5 w-3.5" />
-                  <span>Online Engine</span>
-                </div>
-              </div>
-            )}
-
-            {/* 48-Hour Financial Radar Notifications Center */}
-            <NotificationCenter />
 
             {/* Dark / Light Theme Toggle Button */}
             <button
@@ -261,176 +271,191 @@ export function Navbar({
               <span className="hidden sm:inline">Calculator</span>
             </button>
 
-            {/* DESKTOP-ONLY QUICK UTILITIES (VISIBLE ON XL SCREENS 1280PX+) */}
-            {/* Audit Trail Button */}
-            <button
-              onClick={onOpenAuditTrail}
-              title="Audit Trail Log"
-              className="hidden xl:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
-            >
-              <ShieldCheck className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
-              <span>Audit Trail</span>
-            </button>
+            {/* DESKTOP-ONLY QUICK UTILITIES & MOBILE MORE MENU (Visible only when user is active) */}
+            {user && (
+              <>
+                {/* Audit Trail Button */}
+                <button
+                  onClick={onOpenAuditTrail}
+                  title="Audit Trail Log"
+                  className="hidden xl:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+                  <span>Audit Trail</span>
+                </button>
 
-            {/* Backup / Export Button */}
-            <button
-              onClick={onOpenBackup}
-              title="CSV Export & JSON Backup / Restore"
-              className="hidden xl:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
-            >
-              <Download className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
-              <span>Backup</span>
-            </button>
+                {/* Backup / Export Button */}
+                <button
+                  onClick={onOpenBackup}
+                  title="CSV Export & JSON Backup / Restore"
+                  className="hidden xl:flex items-center gap-1.5 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 transition-colors hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white"
+                >
+                  <Download className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" />
+                  <span>Backup</span>
+                </button>
 
-            {/* Switch Account (Desktop) */}
-            {isDemoUser && (
-              <button
-                type="button"
-                onClick={() => setShowSwitchModal(true)}
-                title="Switch Cloud Account"
-                className="hidden xl:flex items-center gap-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
-              >
-                <ArrowLeftRight className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
-                <span>Switch</span>
-              </button>
-            )}
-
-            {/* LAPTOPS (<1280px), TABLETS & MOBILE "MORE" DROPDOWN MENU */}
-            <div className="relative xl:hidden" ref={menuRef}>
-              <button
-                type="button"
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                title="More Options"
-                className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 p-2 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
-              >
-                <MoreVertical className="h-3.5 w-3.5" />
-              </button>
-
-              {showMoreMenu && (
-                <div className="absolute right-0 mt-2 w-60 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
-                  {/* Mobile Profile Card */}
-                  {user && (
-                    <div className="sm:hidden px-3 py-2 mb-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                          {user.fullName ? user.fullName[0].toUpperCase() : 'U'}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
-                            {user.fullName || user.email}
-                          </p>
-                          <span className="inline-block rounded bg-amber-500/15 px-1.5 py-0.2 text-[9px] font-semibold text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-500/20">
-                            Offline Workspace
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Settings & UPI Profile Option in mobile menu */}
+                {/* Switch Account (Desktop) */}
+                {isDemoUser && (
                   <button
                     type="button"
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      setShowSettingsModal(true);
-                    }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
+                    onClick={() => setShowSwitchModal(true)}
+                    title="Switch Cloud Account"
+                    className="hidden xl:flex items-center gap-1 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-2.5 py-1.5 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
                   >
-                    <Settings className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                    <span>Settings &amp; UPI Profile</span>
+                    <ArrowLeftRight className="h-3.5 w-3.5 text-cyan-600 dark:text-cyan-400" />
+                    <span>Switch</span>
+                  </button>
+                )}
+
+                {/* LAPTOPS (<1280px), TABLETS & MOBILE "MORE" DROPDOWN MENU */}
+                <div className="relative xl:hidden" ref={menuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                    title="More Options"
+                    className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900/80 p-2 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300 dark:hover:border-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
+                  >
+                    <MoreVertical className="h-3.5 w-3.5" />
                   </button>
 
-                  {isDemoUser && (
-                    <>
-                      <button
-                        onClick={handlePullClick}
-                        disabled={isPulling || syncStatus.isSyncing}
-                        className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left disabled:opacity-50"
-                      >
+                  {showMoreMenu && (
+                    <div className="absolute right-0 mt-2 w-60 rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-2 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2">
+                      {/* Mobile Profile Card */}
+                      <div className="sm:hidden px-3 py-2 mb-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800">
                         <div className="flex items-center gap-2">
-                          <CloudDownload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 ${isPulling ? 'animate-bounce' : ''}`} />
-                          <span>Live Sync (Pull Cloud)</span>
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            {user.fullName ? user.fullName[0].toUpperCase() : 'U'}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-zinc-900 dark:text-white truncate">
+                              {user.fullName || user.email}
+                            </p>
+                            <span className="inline-block rounded bg-amber-500/15 px-1.5 py-0.2 text-[9px] font-semibold text-amber-600 dark:text-amber-400 ring-1 ring-inset ring-amber-500/20">
+                              {isDemoUser ? 'Offline Workspace' : 'Online Account'}
+                            </span>
+                          </div>
                         </div>
-                        {isPulling && <span className="text-[10px] text-cyan-500 animate-pulse">Pulling...</span>}
+                      </div>
+
+                      {/* Settings & UPI Profile Option in mobile menu */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          setShowSettingsModal(true);
+                        }}
+                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
+                      >
+                        <Settings className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                        <span>Settings &amp; UPI Profile</span>
                       </button>
+
+                      {/* Admin Control Panel (Mobile Menu - only for deysagar1999@gmail.com) */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowMoreMenu(false);
+                            setShowAdminModal(true);
+                          }}
+                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors text-left"
+                        >
+                          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                          <span>Admin Control Panel</span>
+                        </button>
+                      )}
+
+                      {isDemoUser && (
+                        <>
+                          <button
+                            onClick={handlePullClick}
+                            disabled={isPulling || syncStatus.isSyncing}
+                            className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left disabled:opacity-50"
+                          >
+                            <div className="flex items-center gap-2">
+                              <CloudDownload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 ${isPulling ? 'animate-bounce' : ''}`} />
+                              <span>Live Sync (Pull Cloud)</span>
+                            </div>
+                            {isPulling && <span className="text-[10px] text-cyan-500 animate-pulse">Pulling...</span>}
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setShowMoreMenu(false);
+                              setShowSwitchModal(true);
+                            }}
+                            className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
+                          >
+                            <ArrowLeftRight className="h-4 w-4 text-cyan-500" />
+                            <span>Switch Cloud Account</span>
+                          </button>
+                        </>
+                      )}
+
+                      {!isDemoUser && (
+                        <button
+                          onClick={() => {
+                            setShowMoreMenu(false);
+                            handlePushClick();
+                          }}
+                          disabled={isPushingCloud}
+                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left disabled:opacity-50"
+                        >
+                          <CloudUpload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 ${isPushingCloud ? 'animate-spin' : ''}`} />
+                          <span>Push Local Data to Cloud</span>
+                        </button>
+                      )}
 
                       <button
                         onClick={() => {
                           setShowMoreMenu(false);
-                          setShowSwitchModal(true);
+                          onOpenBackup();
                         }}
                         className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
                       >
-                        <ArrowLeftRight className="h-4 w-4 text-cyan-500" />
-                        <span>Switch Cloud Account</span>
+                        <Download className="h-4 w-4 text-teal-500" />
+                        <span>Backup / Export</span>
                       </button>
-                    </>
-                  )}
 
-                  {!isDemoUser && (
-                    <button
-                      onClick={() => {
-                        setShowMoreMenu(false);
-                        handlePushClick();
-                      }}
-                      disabled={isPushingCloud}
-                      className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left disabled:opacity-50"
-                    >
-                      <CloudUpload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 ${isPushingCloud ? 'animate-spin' : ''}`} />
-                      <span>Push Local Data to Cloud</span>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      onOpenBackup();
-                    }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
-                  >
-                    <Download className="h-4 w-4 text-teal-500" />
-                    <span>Backup / Export</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      onOpenAuditTrail();
-                    }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
-                  >
-                    <ShieldCheck className="h-4 w-4 text-indigo-500" />
-                    <span>Audit Trail Log</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setShowMoreMenu(false);
-                      onOpenCalculator();
-                    }}
-                    className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
-                  >
-                    <Calculator className="h-4 w-4 text-emerald-500" />
-                    <span>Quick Calculator</span>
-                  </button>
-
-                  {user && (
-                    <div className="sm:hidden pt-1 mt-1 border-t border-zinc-200 dark:border-zinc-800">
                       <button
                         onClick={() => {
                           setShowMoreMenu(false);
-                          signOut();
+                          onOpenAuditTrail();
                         }}
-                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors text-left"
+                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left"
                       >
-                        <LogOut className="h-4 w-4" />
-                        <span>Sign Out / Exit Offline</span>
+                        <ShieldCheck className="h-4 w-4 text-indigo-500" />
+                        <span>Audit Trail Log</span>
                       </button>
+
+                      <button
+                        onClick={() => {
+                          setShowMoreMenu(false);
+                          onOpenCalculator();
+                        }}
+                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
+                      >
+                        <Calculator className="h-4 w-4 text-emerald-500" />
+                        <span>Quick Calculator</span>
+                      </button>
+
+                      <div className="sm:hidden pt-1 mt-1 border-t border-zinc-200 dark:border-zinc-800">
+                        <button
+                          onClick={() => {
+                            setShowMoreMenu(false);
+                            signOut();
+                          }}
+                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors text-left"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          <span>Sign Out / Exit Offline</span>
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* Desktop User Profile & Closable Settings Dropdown List */}
             {user ? (
@@ -482,6 +507,29 @@ export function Navbar({
                           </span>
                         </div>
                       </button>
+
+                      {/* Admin Control Panel (Desktop Dropdown - only for deysagar1999@gmail.com) */}
+                      {isAdmin && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            setShowAdminModal(true);
+                          }}
+                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-colors text-left cursor-pointer"
+                        >
+                          <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                          <div>
+                            <span className="flex items-center gap-1.5 font-bold">
+                              Admin Control Panel
+                              <span className="rounded bg-amber-500/20 px-1 py-0.2 text-[9px] text-amber-700 dark:text-amber-300">Admin</span>
+                            </span>
+                            <span className="block text-[10px] text-zinc-400 font-normal">
+                              Manage users, passwords, block/unblock
+                            </span>
+                          </div>
+                        </button>
+                      )}
 
                       {isDemoUser ? (
                         <button
@@ -601,6 +649,12 @@ export function Navbar({
       <UserSettingsModal
         isOpen={showSettingsModal}
         onClose={() => setShowSettingsModal(false)}
+      />
+
+      {/* Primary Admin Control Panel Modal */}
+      <AdminUsersModal
+        isOpen={showAdminModal}
+        onClose={() => setShowAdminModal(false)}
       />
     </>
   );

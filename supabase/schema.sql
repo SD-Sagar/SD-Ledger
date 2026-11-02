@@ -317,3 +317,66 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- ==============================================================================
+-- 5. USER PROFILES & ROLE-BASED ACCESS (ADMIN CONTROL)
+-- ==============================================================================
+
+CREATE TABLE IF NOT EXISTS public.user_profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    email TEXT NOT NULL,
+    full_name TEXT,
+    role TEXT NOT NULL DEFAULT 'user',
+    is_blocked BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
+
+-- Allow users to read their own profile, admin deysagar1999@gmail.com can read all profiles
+DROP POLICY IF EXISTS "Users can read own profile or admin can read all" ON public.user_profiles;
+CREATE POLICY "Users can read own profile or admin can read all"
+ON public.user_profiles
+FOR SELECT
+USING (
+    auth.uid() = id
+    OR (auth.jwt() ->> 'email') = 'deysagar1999@gmail.com'
+);
+
+-- Admin deysagar1999@gmail.com can manage all profiles
+DROP POLICY IF EXISTS "Admin full control on user profiles" ON public.user_profiles;
+CREATE POLICY "Admin full control on user profiles"
+ON public.user_profiles
+FOR ALL
+USING (
+    (auth.jwt() ->> 'email') = 'deysagar1999@gmail.com'
+    OR auth.uid() = id
+);
+
+-- Automatically create or update public.user_profiles whenever an auth.users record is created
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO public.user_profiles (id, email, full_name, role, is_blocked)
+    VALUES (
+        NEW.id,
+        NEW.email,
+        COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
+        CASE WHEN lower(NEW.email) = 'deysagar1999@gmail.com' THEN 'admin' ELSE 'user' END,
+        COALESCE((NEW.raw_user_meta_data->>'is_blocked')::boolean, false)
+    )
+    ON CONFLICT (id) DO UPDATE
+    SET
+        email = EXCLUDED.email,
+        full_name = EXCLUDED.full_name,
+        updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+
