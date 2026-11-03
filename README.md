@@ -27,13 +27,15 @@
 
 ### 💬 WhatsApp Dues Reminders & 1-Tap Nudges
 - **Instant WhatsApp Deep Links**: 1-click reminders via `wa.me` pre-populated with customized messages.
+- **Smart Note Action Visibility**: WhatsApp and QR buttons are cleanly enabled only for receivable dues (*They Owe Me*) and payment reminders, while smartly excluded from payable notes (*I Owe Them*).
 - **Multiple Tone Templates**: Choose between **Polite**, **Casual**, **Direct**, or **Formal** reminder tones.
 - **Embedded NPCI UPI Payload**: Reminders automatically bundle your UPI payment deep link so friends can tap and settle in seconds via Google Pay, PhonePe, or Paytm.
 - **Partial Settlement & Khata Tracking**: Track multi-step repayments with complete audit trails, balance updates, and optional automatic ledger conversion.
 
 ### 💳 UPI Integration & Live Dynamic QR Codes
 - **NPCI Standard Pay URI**: Encodes `upi://pay?pa=<UPI_ID>&pn=<NAME>&am=<AMOUNT>&cu=INR&tn=<NOTE>` for universal compatibility across Indian payment apps.
-- **Live Dynamic QR Code**: Real-time on-screen QR generation for any custom amount or due note with instant 1-tap copy link.
+- **1-Tap Note QR Code**: Dedicated QR button beside WhatsApp on note cards pre-configured with that exact note's outstanding balance for instant, seamless scanning.
+- **UPI Settings Full View**: Dedicated full-screen expand view and Back button in UPI Settings, allowing quick presentation of large scannable QR codes across mobile, laptop, and desktop viewports.
 - **Dual-Synced UPI Profile**: Automatically syncs UPI VPA across `user_profiles` database table and Supabase Auth `user_metadata` for seamless cross-device availability upon login.
 
 ### 📇 Saved Contacts & Mobile Phonebook Directory

@@ -11,6 +11,7 @@ import { SettleNoteModal } from './SettleNoteModal';
 import { FinancialCalendar } from './FinancialCalendar';
 import { WhatsAppNudgeModal } from './WhatsAppNudgeModal';
 import { SavedContactsModal } from './SavedContactsModal';
+import { NoteQrModal } from './NoteQrModal';
 import {
   Pin,
   Plus,
@@ -30,6 +31,7 @@ import {
   Sparkles,
   Clock,
   BookUser,
+  QrCode,
 } from 'lucide-react';
 
 type FilterTab = 'active' | 'THEY_OWE_ME' | 'I_OWE_THEM' | 'REMINDER' | 'resolved';
@@ -97,6 +99,7 @@ export function FinancialNotesSection() {
   const [noteToEdit, setNoteToEdit] = useState<FinancialNote | null>(null);
   const [noteToSettle, setNoteToSettle] = useState<FinancialNote | null>(null);
   const [noteForWhatsApp, setNoteForWhatsApp] = useState<FinancialNote | null>(null);
+  const [noteForQr, setNoteForQr] = useState<FinancialNote | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'calendar'>('cards');
   const [prefilledDueDate, setPrefilledDueDate] = useState<string | undefined>(undefined);
   const [prefilledContact, setPrefilledContact] = useState<SavedContact | null>(null);
@@ -676,18 +679,34 @@ export function FinancialNotesSection() {
                           <span>Settle</span>
                         </button>
 
-                        {/* WhatsApp Nudge Button */}
-                        <button
-                          type="button"
-                          onClick={() => setNoteForWhatsApp(note)}
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-lg transition-colors cursor-pointer"
-                          title="Send WhatsApp Nudge with UPI link & QR"
-                        >
-                          <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-                            <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.27 7.5C9.09 7.5 8.79 7.56 8.54 7.84C8.29 8.11 7.58 8.77 7.58 10.12C7.58 11.47 8.56 12.77 8.7 12.95C8.84 13.13 10.63 15.89 13.37 17.07C14.02 17.35 14.53 17.52 14.93 17.65C15.58 17.86 16.18 17.83 16.65 17.76C17.17 17.68 18.25 17.11 18.48 16.46C18.71 15.81 18.71 15.26 18.64 15.14C18.57 15.02 18.39 14.96 18.12 14.82C17.85 14.68 16.5 14.02 16.25 13.93C16 13.84 15.82 13.79 15.64 14.07C15.46 14.35 14.94 14.96 14.78 15.14C14.62 15.32 14.46 15.34 14.19 15.2C13.92 15.06 13.05 14.78 12.02 13.86C11.22 13.15 10.68 12.27 10.52 12C10.36 11.73 10.5 11.58 10.64 11.44C10.76 11.32 10.91 11.13 11.05 10.97C11.19 10.81 11.24 10.7 11.33 10.52C11.42 10.34 11.38 10.18 11.31 10.04C11.24 9.9 10.69 8.54 10.46 8C10.24 7.47 10.01 7.54 9.85 7.53C9.7 7.53 9.52 7.5 9.27 7.5Z" />
-                          </svg>
-                          <span>WhatsApp</span>
-                        </button>
+                        {/* WhatsApp & QR buttons: ONLY for income-like notes (THEY_OWE_ME) and REMINDER notes; NEVER for I_OWE_THEM */}
+                        {note.type !== 'I_OWE_THEM' && (
+                          <>
+                            {/* WhatsApp Nudge Button */}
+                            <button
+                              type="button"
+                              onClick={() => setNoteForWhatsApp(note)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 rounded-lg transition-colors cursor-pointer"
+                              title="Send WhatsApp Nudge with UPI link & QR"
+                            >
+                              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                                <path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91C2.13 13.66 2.59 15.36 3.45 16.86L2.05 22L7.3 20.62C8.75 21.41 10.38 21.83 12.04 21.83C17.5 21.83 21.95 17.38 21.95 11.92C21.95 9.27 20.92 6.78 19.05 4.91C17.18 3.03 14.69 2 12.04 2M12.05 3.67C14.25 3.67 16.31 4.53 17.87 6.09C19.42 7.65 20.28 9.72 20.28 11.92C20.28 16.46 16.58 20.15 12.04 20.15C10.56 20.15 9.11 19.76 7.85 19L7.55 18.83L4.43 19.65L5.26 16.61L5.06 16.29C4.24 15 3.8 13.47 3.8 11.91C3.81 7.37 7.5 3.67 12.05 3.67M9.27 7.5C9.09 7.5 8.79 7.56 8.54 7.84C8.29 8.11 7.58 8.77 7.58 10.12C7.58 11.47 8.56 12.77 8.7 12.95C8.84 13.13 10.63 15.89 13.37 17.07C14.02 17.35 14.53 17.52 14.93 17.65C15.58 17.86 16.18 17.83 16.65 17.76C17.17 17.68 18.25 17.11 18.48 16.46C18.71 15.81 18.71 15.26 18.64 15.14C18.57 15.02 18.39 14.96 18.12 14.82C17.85 14.68 16.5 14.02 16.25 13.93C16 13.84 15.82 13.79 15.64 14.07C15.46 14.35 14.94 14.96 14.78 15.14C14.62 15.32 14.46 15.34 14.19 15.2C13.92 15.06 13.05 14.78 12.02 13.86C11.22 13.15 10.68 12.27 10.52 12C10.36 11.73 10.5 11.58 10.64 11.44C10.76 11.32 10.91 11.13 11.05 10.97C11.19 10.81 11.24 10.7 11.33 10.52C11.42 10.34 11.38 10.18 11.31 10.04C11.24 9.9 10.69 8.54 10.46 8C10.24 7.47 10.01 7.54 9.85 7.53C9.7 7.53 9.52 7.5 9.27 7.5Z" />
+                              </svg>
+                              <span>WhatsApp</span>
+                            </button>
+
+                            {/* Show QR for this Note's Exact Amount Button */}
+                            <button
+                              type="button"
+                              onClick={() => setNoteForQr(note)}
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-teal-700 dark:text-teal-300 bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 rounded-lg transition-colors cursor-pointer"
+                              title={typeof note.amount === 'number' ? `Show UPI QR code for ₹${note.amount.toFixed(2)}` : 'Show UPI QR code'}
+                            >
+                              <QrCode className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                              <span>QR</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -748,6 +767,16 @@ export function FinancialNotesSection() {
         isOpen={!!noteForWhatsApp}
         onClose={() => setNoteForWhatsApp(null)}
         note={noteForWhatsApp}
+        onOpenSettings={() => {
+          window.dispatchEvent(new CustomEvent('sd-open-settings'));
+        }}
+      />
+
+      {/* Dynamic Note UPI QR Modal */}
+      <NoteQrModal
+        isOpen={!!noteForQr}
+        onClose={() => setNoteForQr(null)}
+        note={noteForQr}
         onOpenSettings={() => {
           window.dispatchEvent(new CustomEvent('sd-open-settings'));
         }}
