@@ -33,6 +33,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
   const [payeeName, setPayeeName] = useState('Sagar Dey');
   const [upiId, setUpiId] = useState('');
+  const [customAmount, setCustomAmount] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [showFullQr, setShowFullQr] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -41,6 +42,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   useEffect(() => {
     if (isOpen) {
       setShowFullQr(false);
+      setCustomAmount('');
       const stored = getStoredUpiSettings();
       setPayeeName(stored.payeeName || user?.fullName || 'Sagar Dey');
       setUpiId(stored.upiId || '');
@@ -89,23 +91,27 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
     }
   }, [isOpen, user, linkedCloudUserId]);
 
-  // Generate dynamic QR preview whenever UPI ID changes
+  const parsedAmount = customAmount.trim() ? parseFloat(customAmount) : null;
+  const validCustomAmount =
+    parsedAmount && !isNaN(parsedAmount) && parsedAmount > 0 ? parsedAmount : null;
+
+  // Generate dynamic QR preview whenever UPI ID or custom amount changes
   useEffect(() => {
     if (!upiId.trim() || !upiId.includes('@')) {
       setQrDataUrl(null);
       return;
     }
 
-    const testUri = buildUpiPayUri({
+    // Default has no amount locked (open amount, free to edit starting at 0 in all UPI apps)
+    const uri = buildUpiPayUri({
       upiId: upiId.trim(),
       payeeName: payeeName.trim(),
-      amount: 100, // sample preview amount
-      noteTitle: 'Payment Preview',
+      amount: validCustomAmount,
     });
 
     let isMounted = true;
-    QRCode.toDataURL(testUri, {
-      width: 220,
+    QRCode.toDataURL(uri, {
+      width: 320,
       margin: 1.5,
       color: {
         dark: '#0f172a',
@@ -122,7 +128,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
     return () => {
       isMounted = false;
     };
-  }, [upiId, payeeName]);
+  }, [upiId, payeeName, validCustomAmount]);
 
   if (!isOpen) return null;
 
@@ -187,6 +193,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
     const uri = buildUpiPayUri({
       upiId: upiId.trim(),
       payeeName: payeeName.trim(),
+      amount: validCustomAmount,
     });
     navigator.clipboard.writeText(uri);
     setHasCopied(true);
@@ -248,8 +255,44 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                   {upiId}
                 </p>
                 <span className="inline-block mt-2 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 px-3 py-0.5 text-[10px] sm:text-xs font-semibold border border-emerald-500/30">
-                  Scan to Pay via Google Pay, PhonePe, Paytm, BHIM, CRED
+                  {validCustomAmount
+                    ? `Fixed Amount: ₹${validCustomAmount.toFixed(2)}`
+                    : 'Free to Edit (Starts at ₹0 / Open Amount)'}
                 </span>
+              </div>
+
+              {/* Optional Custom Amount Input for on-the-fly QR generation */}
+              <div className="w-full max-w-xs mt-3.5 pt-3 border-t border-zinc-200/60 dark:border-zinc-800 text-left">
+                <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 block mb-1">
+                  Custom Amount (Optional)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-zinc-400">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    placeholder="0 (Free to enter any amount)"
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 pl-7 pr-8 py-1.5 text-xs font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  />
+                  {customAmount && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomAmount('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 text-xs font-bold px-1"
+                      title="Reset to free amount"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-zinc-400 mt-1">
+                  {validCustomAmount
+                    ? 'QR is currently locked to this amount'
+                    : 'Left at 0: Payer can enter any amount when scanning'}
+                </p>
               </div>
 
               <div className="mt-5 flex items-center justify-center gap-2 flex-wrap w-full">
@@ -423,9 +466,13 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       <span className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold block">
                         {upiId}
                       </span>
+                      <div className="pt-0.5">
+                        <span className="inline-block rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 text-[10px] font-semibold border border-emerald-500/20">
+                          {validCustomAmount ? `Amount: ₹${validCustomAmount.toFixed(2)}` : 'Free to Edit (Starts at ₹0)'}
+                        </span>
+                      </div>
                       <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed pt-1">
-                        When you click the WhatsApp button or QR icon on any due or khata note, this QR and instant
-                        pay link are generated automatically for that exact note amount!
+                        Scanning this QR allows anyone to enter any custom payment amount freely. In notes and dues, QR codes automatically lock to that note&apos;s balance!
                       </p>
                     </div>
                   </div>
