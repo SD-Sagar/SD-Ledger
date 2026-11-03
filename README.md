@@ -55,8 +55,8 @@
 - **Multi-Resolution Desktop Icon**: Custom 16×16, 32×32, and 48×48 multi-layered `.ico` file ensuring pristine rendering on Windows taskbars and desktop shortcuts.
 
 ### 📱 Viewport & Touch-Optimized Mobile Experience
-- **Sleek Mobile Bottom Action Dock**: Persistent 1-tap everyday financial actions (*Add Expense*, *Add Income*, *Transfer Money*) leveled on an even baseline, paired with *Notes & Dues* (with live unresolved badge) and *Trends*.
-- **Sticky Top Section Tabs**: Dashboard views (*Trends*, *Accounts*, *History*, *Notes*, *Reconcile*) stick smoothly below the top navbar during scrolling so section switching is always accessible.
+- **Sleek Mobile Bottom Action Dock**: 5 core 1-tap utility actions (*Add Expense*, *Add Income*, *Transfer Money*, *Quick Calculator*, and *Push to Cloud*) leveled on an even baseline without screen clutter or repetition.
+- **Sticky Middle Section Tabs**: Primary dashboard navigation (*Trends*, *Accounts*, *History*, *Notes*, *Reconcile*) sticks smoothly below the top navbar during scrolling so section switching is always accessible without repeating in the bottom dock.
 - **Fintech Bank Account Cards**: Clean, full-width responsive bank cards on mobile featuring bank color theme accents (`border-t-4`), readable titles, and statement reconciliation pills, anchored by a master Combined Net Balance summary header.
 - **Zero-Duplication Interface**: Backup/Export and Audit Trail are consolidated inside the User Settings menu, keeping the bottom dock uncluttered and focused purely on everyday financial navigation.
 - **Mobile-Friendly Modals**: Sticky top headers with guaranteed close cross (`X`) button visibility, pinned action footers, and smooth momentum scrolling (`overscroll-contain`) adapted to dynamic viewport heights (`92dvh`).

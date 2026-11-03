@@ -164,9 +164,9 @@ export function Navbar({
             {/* Logged-in only tools & sync controls */}
             {user && (
               <>
-                {/* OFFLINE MODE: Linked Cloud Badge with Live Sync & Upload Buttons */}
+                {/* OFFLINE MODE: Linked Cloud Badge with Live Sync & Upload Buttons (Desktop/Tablet only; on mobile in bottom dock) */}
                 {isDemoUser && (
-                  <div className="flex items-center gap-1 sm:gap-1.5">
+                  <div className="hidden sm:flex items-center gap-1 sm:gap-1.5">
                     {/* Linked Cloud Account Badge + Quick Live Sync */}
                     <div
                       className="flex items-center gap-1 sm:gap-1.5 rounded-xl border border-cyan-300/80 dark:border-cyan-800/80 bg-cyan-50/90 dark:bg-cyan-950/60 p-1 sm:px-2.5 sm:py-1 text-xs font-medium text-cyan-800 dark:text-cyan-300 shadow-sm"
@@ -220,9 +220,9 @@ export function Navbar({
                   </div>
                 )}
 
-                {/* Online mode: Push Localhost Data to Cloud Button */}
+                {/* Online mode: Push Localhost Data to Cloud Button (Desktop/Tablet only; on mobile in bottom dock) */}
                 {!isDemoUser && (
-                  <div className="flex items-center gap-1 sm:gap-1.5">
+                  <div className="hidden sm:flex items-center gap-1 sm:gap-1.5">
                     <button
                       type="button"
                       onClick={handlePushClick}
@@ -260,12 +260,12 @@ export function Navbar({
               )}
             </button>
 
-            {/* Quick Calculator Button (Available on all screens & desktop) */}
+            {/* Quick Calculator Button (Desktop & Tablet only; on mobile it is in the bottom dock) */}
             <button
               type="button"
               onClick={onOpenCalculator}
               title="Quick Calculator (Keyboard Supported)"
-              className="flex items-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/80 dark:bg-emerald-950/30 p-2 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-xs"
+              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/80 dark:bg-emerald-950/30 p-2 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors shadow-xs"
             >
               <Calculator className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
               <span className="hidden sm:inline">Calculator</span>

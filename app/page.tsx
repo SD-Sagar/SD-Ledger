@@ -131,15 +131,13 @@ function MainAppContent() {
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Synchronized with Active Tab & Quick Actions) */}
+      {/* Mobile Bottom Navigation Bar (Quick Actions Dock: Expense, Income, Transfer, Calculator, Push Cloud) */}
       {user && (
         <MobileNavigation
-          activeTab={activeTab}
-          onSelectTab={setActiveTab}
           onOpenExpense={() => setShowMobileExpenseModal(true)}
           onOpenIncome={() => setShowMobileIncomeModal(true)}
           onOpenTransfer={() => setShowMobileTransferModal(true)}
-          unresolvedNotesCount={notes ? notes.filter((n) => !n.is_resolved).length : 0}
+          onOpenCalculator={() => setShowCalculatorModal(true)}
         />
       )}
 
