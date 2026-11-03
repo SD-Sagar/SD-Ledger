@@ -320,8 +320,8 @@ export function Dashboard({ onOpenAuth, activeTab: propActiveTab, onSelectTab }:
         </div>
       )}
 
-      {/* SEGMENTED VIEW NAVIGATION TABS (FULL ACCESS ON ANY SCREEN WITHOUT SIDE SCROLLING) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-zinc-200 dark:border-zinc-800/80 pb-2 gap-2">
+      {/* SEGMENTED VIEW NAVIGATION TABS (STICKY ON MOBILE SO SECTION BUTTONS NEVER GET SCROLLED AWAY) */}
+      <div className="sticky top-[56px] z-20 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl -mx-4 px-4 sm:mx-0 sm:px-0 py-2 border-b border-zinc-200 dark:border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs sm:shadow-none">
         <div className="grid grid-cols-5 gap-1 sm:flex sm:items-center sm:gap-2 w-full sm:w-auto">
           {/* Tab 1: Overview & Trends */}
           <button
@@ -830,46 +830,48 @@ export function Dashboard({ onOpenAuth, activeTab: propActiveTab, onSelectTab }:
             </div>
           </div>
 
-          {/* ACCOUNTS DISPLAY (Mobile: Apple Wallet-style Horizontal Swipe Carousel; Desktop: Multi-column Grid) */}
-          <div className="flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-3 -mx-4 px-4 no-scrollbar md:mx-0 md:px-0 md:pb-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
-            {/* TOTAL COMBINED NET LIQUIDITY CARD */}
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-white via-zinc-50 to-zinc-100 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 p-5 shadow-lg flex flex-col justify-between w-[84vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink">
-              <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-xl" />
+          {/* TOTAL COMBINED NET LIQUIDITY CARD (Full-Width Top Summary Header) */}
+          <div className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-white via-zinc-50 to-zinc-100 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-xl" />
 
-              <div>
-                <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">
-                  <span className="flex items-center gap-1.5">
-                    <Wallet className="h-4 w-4 text-emerald-500" />
-                    Combined Net Balance
-                  </span>
-                  <span className="text-[10px] text-zinc-400">Total Net</span>
-                </div>
-
-                <div className="mt-2">
-                  <h3 className="text-3xl font-extrabold text-zinc-900 dark:text-white tracking-tight font-mono">
-                    {formatINR(summary.totalCalculatedBalance)}
-                  </h3>
-                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                    Calculated sum across {summary.accounts.length} active personal accounts
-                  </p>
-                </div>
+            <div>
+              <div className="flex items-center justify-between sm:justify-start gap-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1.5">
+                <span className="flex items-center gap-1.5">
+                  <Wallet className="h-4 w-4 text-emerald-500" />
+                  Combined Net Balance
+                </span>
+                <span className="rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 px-2 py-0.5 text-[10px] font-bold">
+                  {summary.accounts.length} {summary.accounts.length === 1 ? 'Account' : 'Accounts'}
+                </span>
               </div>
 
-              <div className="mt-4 flex items-center justify-between rounded-xl bg-zinc-100 dark:bg-zinc-900/80 p-2.5 border border-zinc-200 dark:border-zinc-800 text-xs">
-                <span className="text-zinc-500 dark:text-zinc-400">Net Flow This Month:</span>
-                <span
-                  className={`font-bold font-mono ${
-                    summary.monthNetSavings >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
-                  }`}
-                >
-                  {formatINR(summary.monthNetSavings, true)}
-                </span>
+              <div className="mt-1">
+                <h3 className="text-3xl font-extrabold text-zinc-900 dark:text-white tracking-tight font-mono">
+                  {formatINR(summary.totalCalculatedBalance)}
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                  Calculated sum across all personal accounts and ledgers
+                </p>
               </div>
             </div>
 
+            <div className="flex items-center justify-between sm:justify-end gap-3 rounded-xl bg-zinc-100 dark:bg-zinc-900/80 p-3 border border-zinc-200 dark:border-zinc-800 text-xs shrink-0">
+              <span className="text-zinc-500 dark:text-zinc-400">Net Flow This Month:</span>
+              <span
+                className={`font-bold font-mono text-sm ${
+                  summary.monthNetSavings >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                }`}
+              >
+                {formatINR(summary.monthNetSavings, true)}
+              </span>
+            </div>
+          </div>
+
+          {/* ACCOUNTS RESPONSIVE FINTECH GRID (Clean, full-width vertical stack on mobile; 2-3 cols on desktop) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* SINGLE ACCOUNT BOILERPLATE CARD WITH PLUS ICON (ONLY PLACEHOLDERS, NEVER AUTO-SAVED) */}
             {accounts.length === 0 && (
-              <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-emerald-400/80 dark:border-emerald-600/80 bg-white/95 dark:bg-zinc-950/95 p-5 shadow-xl transition-all md:col-span-2 flex flex-col justify-between w-[84vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink">
+              <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-emerald-400/80 dark:border-emerald-600/80 bg-white/95 dark:bg-zinc-950/95 p-5 shadow-xl transition-all md:col-span-2 lg:col-span-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
@@ -971,28 +973,29 @@ export function Dashboard({ onOpenAuth, activeTab: propActiveTab, onSelectTab }:
               </div>
             )}
 
-            {/* DYNAMIC COMPACT ACCOUNT CARDS (NO RAW UUIDS, SLEEK FINTECH DESIGN) */}
+            {/* DYNAMIC COMPACT ACCOUNT CARDS (SLEEK FINTECH CARDS WITH BANK COLOR ACCENTS) */}
             {summary.accounts.map((accSummary, idx) => (
               <div
                 key={accSummary.account.id}
-                className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-lg flex flex-col justify-between transition-all hover:border-zinc-300 dark:hover:border-zinc-700 w-[84vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink"
+                className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-sm hover:shadow-md flex flex-col justify-between transition-all hover:border-zinc-300 dark:hover:border-zinc-700 border-t-4"
+                style={{ borderTopColor: accSummary.account.bank_color || '#059669' }}
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
                       <div
-                        className="h-3.5 w-3.5 rounded-full shrink-0 shadow-sm"
+                        className="h-3.5 w-3.5 rounded-full shrink-0 shadow-xs ring-2 ring-zinc-200 dark:ring-zinc-700"
                         style={{ backgroundColor: accSummary.account.bank_color || '#059669' }}
                       />
-                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate max-w-[150px]">
+                      <h4 className="text-sm font-bold text-zinc-900 dark:text-white tracking-tight truncate">
                         {accSummary.account.display_name}
                       </h4>
-                      <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-500">
+                      <span className="rounded bg-zinc-100 dark:bg-zinc-800 px-1.5 py-0.5 text-[9px] font-semibold text-zinc-500 shrink-0">
                         #{idx + 1}
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
                       <button
                         onClick={() => handleOpenReconcile(accSummary.account.id)}
                         title="Reconcile with bank statement"
@@ -1067,7 +1070,7 @@ export function Dashboard({ onOpenAuth, activeTab: propActiveTab, onSelectTab }:
             <button
               type="button"
               onClick={() => setShowAddAccountModal(true)}
-              className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/20 p-5 text-center transition-all hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-zinc-900/40 min-h-[190px] w-[65vw] max-w-[240px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink"
+              className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/20 p-5 text-center transition-all hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-zinc-900/40 min-h-[180px]"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm">
                 <Plus className="h-5 w-5" />
@@ -1081,12 +1084,6 @@ export function Dashboard({ onOpenAuth, activeTab: propActiveTab, onSelectTab }:
                 </span>
               </div>
             </button>
-          </div>
-
-          {/* Mobile Swipe Hint */}
-          <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] text-zinc-400 md:hidden w-full">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Swipe cards horizontally &bull; {summary.accounts.length} accounts</span>
           </div>
         </div>
       )}

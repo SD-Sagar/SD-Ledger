@@ -131,11 +131,13 @@ function MainAppContent() {
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar (Synchronized with Active Tab) */}
+      {/* Mobile Bottom Navigation Bar (Synchronized with Active Tab & Quick Actions) */}
       {user && (
         <MobileNavigation
           activeTab={activeTab}
           onSelectTab={setActiveTab}
+          onOpenExpense={() => setShowMobileExpenseModal(true)}
+          onOpenIncome={() => setShowMobileIncomeModal(true)}
           onOpenTransfer={() => setShowMobileTransferModal(true)}
           unresolvedNotesCount={notes ? notes.filter((n) => !n.is_resolved).length : 0}
         />
