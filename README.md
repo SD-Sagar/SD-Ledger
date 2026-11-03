@@ -54,9 +54,12 @@
 - **Crisp Retina Browser Favicon**: Direct SVG favicon served dynamically via Next.js App Router for lossless clarity in browser tabs.
 - **Multi-Resolution Desktop Icon**: Custom 16×16, 32×32, and 48×48 multi-layered `.ico` file ensuring pristine rendering on Windows taskbars and desktop shortcuts.
 
-### 📱 Viewport & Touch-Optimized Interface
+### 📱 Viewport & Touch-Optimized Mobile Experience
+- **Sleek Mobile Bottom Navigation Dock**: 5 core 1-tap targets (*Trends*, *Accounts*, *Transfer*, *Notes*, *History*) fixed at the bottom for thumb-friendly reach, with live badge indicators for unresolved dues.
+- **Apple Wallet-Style Accounts Carousel**: Horizontal swipeable bank cards with native CSS touch snap points (`snap-x snap-mandatory`) and indicator hints on mobile, cleanly expanding to a responsive multi-column grid on desktop.
+- **Zero-Duplication Interface**: Backup/Export and Audit Trail are consolidated inside the User Settings menu, keeping the bottom dock uncluttered and focused purely on everyday financial navigation.
 - **Mobile-Friendly Modals**: Sticky top headers with guaranteed close cross (`X`) button visibility, pinned action footers, and smooth momentum scrolling (`overscroll-contain`) adapted to dynamic viewport heights (`92dvh`).
-- **Segmented Clean Navigation**: Clean tabbed dashboard (*Overview & Trends, Accounts, Transactions, Notes & Dues, Reconcile*) optimized for both mobile screens and wide desktop displays.
+- **Unified IST Ledger**: Instant transaction recording defaulted to India Standard Time (IST) with offline IndexedDB backup.
 
 ### 📊 Comprehensive Bank Ledger & Statement Reconciliation
 - **Personal Account Management**: Starts with your first personal accounts and allows unlimited additions (*HDFC, SBI, Cash Wallet, Salary, Business Accounts*).

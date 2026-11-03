@@ -19,7 +19,10 @@ import { BrandLogo } from '../components/BrandLogo';
 
 function MainAppContent() {
   const { isLoading: authLoading, user, continueAsDemo } = useAuth();
-  const { isInitialized, needsSetupWizard } = useLedger();
+  const { isInitialized, needsSetupWizard, notes } = useLedger();
+
+  // Active dashboard tab state (shared across desktop and mobile bottom dock)
+  const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'transactions' | 'notes' | 'reconcile'>('overview');
 
   // Top level modal controls
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -120,19 +123,21 @@ function MainAppContent() {
             </div>
           </div>
         ) : (
-          <Dashboard onOpenAuth={handleOpenAuth} />
+          <Dashboard
+            onOpenAuth={handleOpenAuth}
+            activeTab={activeTab}
+            onSelectTab={setActiveTab}
+          />
         )}
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar (Synchronized with Active Tab) */}
       {user && (
         <MobileNavigation
-          onOpenExpense={() => setShowMobileExpenseModal(true)}
-          onOpenIncome={() => setShowMobileIncomeModal(true)}
+          activeTab={activeTab}
+          onSelectTab={setActiveTab}
           onOpenTransfer={() => setShowMobileTransferModal(true)}
-          onOpenBackup={() => setShowBackupModal(true)}
-          onOpenCalculator={() => setShowCalculatorModal(true)}
-          onOpenAudit={() => setShowAuditModal(true)}
+          unresolvedNotesCount={notes ? notes.filter((n) => !n.is_resolved).length : 0}
         />
       )}
 

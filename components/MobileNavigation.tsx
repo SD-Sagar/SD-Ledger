@@ -2,105 +2,137 @@
 
 import React from 'react';
 import {
-  MinusCircle,
-  PlusCircle,
+  Activity,
+  Wallet,
   ArrowRightLeft,
-  ShieldCheck,
-  Download,
+  StickyNote,
+  History,
 } from 'lucide-react';
 
 interface MobileNavigationProps {
-  onOpenExpense: () => void;
-  onOpenIncome: () => void;
+  activeTab: 'overview' | 'accounts' | 'transactions' | 'notes' | 'reconcile';
+  onSelectTab: (tab: 'overview' | 'accounts' | 'transactions' | 'notes' | 'reconcile') => void;
   onOpenTransfer: () => void;
-  onOpenBackup: () => void;
-  onOpenCalculator?: () => void;
-  onOpenAudit: () => void;
+  unresolvedNotesCount?: number;
 }
 
 export function MobileNavigation({
-  onOpenExpense,
-  onOpenIncome,
+  activeTab,
+  onSelectTab,
   onOpenTransfer,
-  onOpenBackup,
-  onOpenAudit,
+  unresolvedNotesCount = 0,
 }: MobileNavigationProps) {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 block sm:hidden border-t border-zinc-200/80 dark:border-zinc-800/80 bg-white/92 dark:bg-zinc-950/92 px-3 pt-2 pb-[max(0.65rem,env(safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-8px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition-colors">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 block sm:hidden border-t border-zinc-200/80 dark:border-zinc-800/80 bg-white/92 dark:bg-zinc-950/92 px-2 pt-2 pb-[max(0.65rem,env(safe-area-inset-bottom))] backdrop-blur-2xl shadow-[0_-8px_24px_rgba(0,0,0,0.06)] dark:shadow-[0_-8px_24px_rgba(0,0,0,0.45)] transition-colors">
       <div className="flex items-center justify-around max-w-md mx-auto">
-        {/* Quick Add Expense */}
+        {/* Tab 1: Overview & Trends */}
         <button
           type="button"
-          onClick={onOpenExpense}
-          className="flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group"
-          title="Add Expense"
+          onClick={() => onSelectTab('overview')}
+          className={`flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group ${
+            activeTab === 'overview'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+          }`}
+          title="Overview & Trends"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/25 text-rose-600 dark:text-rose-400 shadow-2xs group-hover:scale-105 transition-transform">
-            <MinusCircle className="h-4.5 w-4.5" />
+          <div
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+              activeTab === 'overview'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500/30'
+                : 'bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+            }`}
+          >
+            <Activity className="h-4.5 w-4.5" />
           </div>
-          <span className="text-[10px] font-bold tracking-tight text-zinc-600 dark:text-zinc-400 group-hover:text-rose-600 dark:group-hover:text-rose-400">
-            Expense
-          </span>
+          <span className="text-[10px] font-bold tracking-tight">Trends</span>
         </button>
 
-        {/* Quick Add Income */}
+        {/* Tab 2: Accounts */}
         <button
           type="button"
-          onClick={onOpenIncome}
-          className="flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group"
-          title="Add Income"
+          onClick={() => onSelectTab('accounts')}
+          className={`flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group ${
+            activeTab === 'accounts'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+          }`}
+          title="Bank Accounts"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 text-emerald-600 dark:text-emerald-400 shadow-2xs group-hover:scale-105 transition-transform">
-            <PlusCircle className="h-4.5 w-4.5" />
+          <div
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+              activeTab === 'accounts'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500/30'
+                : 'bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+            }`}
+          >
+            <Wallet className="h-4.5 w-4.5" />
           </div>
-          <span className="text-[10px] font-bold tracking-tight text-zinc-600 dark:text-zinc-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-            Income
-          </span>
+          <span className="text-[10px] font-bold tracking-tight">Accounts</span>
         </button>
 
-        {/* Quick Transfer (Sassy Center Elevated Button) */}
+        {/* Action: Transfer (Evenly aligned on same baseline) */}
         <button
           type="button"
           onClick={onOpenTransfer}
-          className="flex flex-col items-center gap-1 -mt-3.5 active:scale-95 transition-all cursor-pointer group"
+          className="flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group text-indigo-600 dark:text-indigo-400"
           title="Transfer Money Between Accounts"
         >
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-600/35 ring-3 ring-white dark:ring-zinc-950 group-hover:scale-105 transition-transform">
-            <ArrowRightLeft className="h-5 w-5" />
-          </div>
-          <span className="text-[10px] font-extrabold tracking-tight text-indigo-600 dark:text-indigo-400">
-            Transfer
-          </span>
-        </button>
-
-        {/* Audit Trail */}
-        <button
-          type="button"
-          onClick={onOpenAudit}
-          className="flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group"
-          title="Audit Trail Log"
-        >
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/25 text-indigo-600 dark:text-indigo-400 shadow-2xs group-hover:scale-105 transition-transform">
-            <ShieldCheck className="h-4.5 w-4.5" />
+            <ArrowRightLeft className="h-4.5 w-4.5" />
           </div>
-          <span className="text-[10px] font-bold tracking-tight text-zinc-600 dark:text-zinc-400 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-            Audit
-          </span>
+          <span className="text-[10px] font-extrabold tracking-tight">Transfer</span>
         </button>
 
-        {/* Backup / Export */}
+        {/* Tab 3: Notes & Dues */}
         <button
           type="button"
-          onClick={onOpenBackup}
-          className="flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group"
-          title="Backup & Export"
+          onClick={() => onSelectTab('notes')}
+          className={`flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group relative ${
+            activeTab === 'notes'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+          }`}
+          title="Notes & Dues"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/10 dark:bg-teal-500/15 border border-teal-500/25 text-teal-600 dark:text-teal-400 shadow-2xs group-hover:scale-105 transition-transform">
-            <Download className="h-4.5 w-4.5" />
+          <div
+            className={`flex h-9 w-9 items-center justify-center rounded-xl relative transition-all ${
+              activeTab === 'notes'
+                ? 'bg-amber-600 text-white shadow-md shadow-amber-600/30 ring-2 ring-amber-500/30'
+                : 'bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+            }`}
+          >
+            <StickyNote className="h-4.5 w-4.5" />
+            {unresolvedNotesCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white shadow-xs">
+                {unresolvedNotesCount}
+              </span>
+            )}
           </div>
-          <span className="text-[10px] font-bold tracking-tight text-zinc-600 dark:text-zinc-400 group-hover:text-teal-600 dark:group-hover:text-teal-400">
-            Backup
-          </span>
+          <span className="text-[10px] font-bold tracking-tight">Notes</span>
+        </button>
+
+        {/* Tab 4: Transactions History */}
+        <button
+          type="button"
+          onClick={() => onSelectTab('transactions')}
+          className={`flex flex-col items-center gap-1 active:scale-90 transition-all cursor-pointer group ${
+            activeTab === 'transactions'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+          }`}
+          title="Transaction History"
+        >
+          <div
+            className={`flex h-9 w-9 items-center justify-center rounded-xl transition-all ${
+              activeTab === 'transactions'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-2 ring-emerald-500/30'
+                : 'bg-zinc-100 dark:bg-zinc-900 border border-zinc-200/60 dark:border-zinc-800 text-zinc-600 dark:text-zinc-400'
+            }`}
+          >
+            <History className="h-4.5 w-4.5" />
+          </div>
+          <span className="text-[10px] font-bold tracking-tight">History</span>
         </button>
       </div>
     </nav>

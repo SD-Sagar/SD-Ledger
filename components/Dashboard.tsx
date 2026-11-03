@@ -43,11 +43,13 @@ import { UpiTeaserCard } from './UpiTeaserCard';
 
 interface DashboardProps {
   onOpenAuth?: (prompt?: string) => void;
+  activeTab?: DashboardTab;
+  onSelectTab?: (tab: DashboardTab) => void;
 }
 
 type DashboardTab = 'overview' | 'accounts' | 'transactions' | 'notes' | 'reconcile';
 
-export function Dashboard({ onOpenAuth }: DashboardProps) {
+export function Dashboard({ onOpenAuth, activeTab: propActiveTab, onSelectTab }: DashboardProps) {
   const {
     summary,
     accounts,
@@ -106,10 +108,18 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
     }
   };
 
-  // Active view tab
-  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  // Active view tab (controlled from props if provided, otherwise internal)
+  const [internalActiveTab, setInternalActiveTab] = useState<DashboardTab>('overview');
+  const activeTab = propActiveTab !== undefined ? propActiveTab : internalActiveTab;
+  const setActiveTab = (tab: DashboardTab) => {
+    if (onSelectTab) {
+      onSelectTab(tab);
+    } else {
+      setInternalActiveTab(tab);
+    }
+  };
 
-  // Listen for external tab navigation requests (e.g. from 48-Hour Notification Center)
+  // Listen for external tab navigation requests (e.g. from 48-Hour Notification Center or shortcuts)
   React.useEffect(() => {
     const handleTabNav = (e: Event) => {
       const customEvent = e as CustomEvent<DashboardTab>;
@@ -118,7 +128,11 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
       }
     };
     window.addEventListener('sd-navigate-tab', handleTabNav);
-    return () => window.removeEventListener('sd-navigate-tab', handleTabNav);
+    window.addEventListener('sd-switch-tab', handleTabNav);
+    return () => {
+      window.removeEventListener('sd-navigate-tab', handleTabNav);
+      window.removeEventListener('sd-switch-tab', handleTabNav);
+    };
   }, []);
 
   // Modals state
@@ -816,9 +830,10 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* ACCOUNTS DISPLAY (Mobile: Apple Wallet-style Horizontal Swipe Carousel; Desktop: Multi-column Grid) */}
+          <div className="flex overflow-x-auto snap-x snap-mandatory gap-3.5 pb-3 -mx-4 px-4 no-scrollbar md:mx-0 md:px-0 md:pb-0 md:grid md:grid-cols-2 lg:grid-cols-3 md:gap-4">
             {/* TOTAL COMBINED NET LIQUIDITY CARD */}
-            <div className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-white via-zinc-50 to-zinc-100 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 p-5 shadow-lg flex flex-col justify-between">
+            <div className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-gradient-to-br from-white via-zinc-50 to-zinc-100 dark:from-zinc-900 dark:via-zinc-950 dark:to-zinc-950 p-5 shadow-lg flex flex-col justify-between w-[84vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink">
               <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-emerald-500/10 blur-xl" />
 
               <div>
@@ -854,7 +869,7 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
 
             {/* SINGLE ACCOUNT BOILERPLATE CARD WITH PLUS ICON (ONLY PLACEHOLDERS, NEVER AUTO-SAVED) */}
             {accounts.length === 0 && (
-              <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-emerald-400/80 dark:border-emerald-600/80 bg-white/95 dark:bg-zinc-950/95 p-5 shadow-xl transition-all md:col-span-2 flex flex-col justify-between">
+              <div className="relative overflow-hidden rounded-2xl border-2 border-dashed border-emerald-400/80 dark:border-emerald-600/80 bg-white/95 dark:bg-zinc-950/95 p-5 shadow-xl transition-all md:col-span-2 flex flex-col justify-between w-[84vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink">
                 <div>
                   <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
                     <div className="flex items-center gap-2">
@@ -960,7 +975,7 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
             {summary.accounts.map((accSummary, idx) => (
               <div
                 key={accSummary.account.id}
-                className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-lg flex flex-col justify-between transition-all hover:border-zinc-300 dark:hover:border-zinc-700"
+                className="relative overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-5 shadow-lg flex flex-col justify-between transition-all hover:border-zinc-300 dark:hover:border-zinc-700 w-[84vw] max-w-[320px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink"
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
@@ -1052,7 +1067,7 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
             <button
               type="button"
               onClick={() => setShowAddAccountModal(true)}
-              className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/20 p-5 text-center transition-all hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-zinc-900/40 min-h-[190px]"
+              className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-dashed border-zinc-300 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/20 p-5 text-center transition-all hover:border-emerald-500 hover:bg-emerald-50/30 dark:hover:bg-zinc-900/40 min-h-[190px] w-[65vw] max-w-[240px] shrink-0 snap-center md:w-auto md:max-w-none md:shrink"
             >
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm">
                 <Plus className="h-5 w-5" />
@@ -1066,6 +1081,12 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
                 </span>
               </div>
             </button>
+          </div>
+
+          {/* Mobile Swipe Hint */}
+          <div className="flex items-center justify-center gap-1.5 pt-1 text-[11px] text-zinc-400 md:hidden w-full">
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Swipe cards horizontally &bull; {summary.accounts.length} accounts</span>
           </div>
         </div>
       )}

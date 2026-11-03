@@ -414,17 +414,6 @@ export function Navbar({
                         <span>Audit Trail Log</span>
                       </button>
 
-                      <button
-                        onClick={() => {
-                          setShowMoreMenu(false);
-                          onOpenCalculator();
-                        }}
-                        className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left"
-                      >
-                        <Calculator className="h-4 w-4 text-emerald-500" />
-                        <span>Quick Calculator</span>
-                      </button>
-
                       <div className="sm:hidden pt-1 mt-1 border-t border-zinc-200 dark:border-zinc-800">
                         <button
                           onClick={() => {
