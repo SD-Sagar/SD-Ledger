@@ -20,24 +20,50 @@
 
 ## Key Features
 
-- **Personal Account Management**: Starts with a friendly setup wizard for your first two personal bank accounts, and allows adding unlimited accounts anytime (*ICICI Bank, Cash Wallet, Kotak 811, Business Accounts*, etc.).
-- **Zero Banking Credentials Required**: No real account numbers or net-banking passwords are ever asked or stored.
-- **Bespoke Theme-Reactive Brand Identity**: Custom-crafted vector Wallet & Ledger icon carrying an embossed **SD** monogram, peeking statement tab, golden security clasp, and dual credit/debit indicators. Automatically shifts colors between Light and Dark mode.
-- **Dynamic App & Favicon Generator**: Programmatically generates high-res favicons and mobile touch icons (`app/icon.tsx`) matching the bespoke SD wallet brand mark.
-- **Smart Sticky Notes & Dues Tracker**: Digital sticky notes pinboard for tracking money you owe (*Owed By Me*), money owed to you (*Owed To Me*), and general payment reminders. Features color tags, due dates, and instant search.
-- **1-Click Auto-Settle to Ledger**: Resolving a note can automatically post an atomic **Expense** or **Income** directly into your chosen bank account with instant balance updates.
-- **Groww-Style Financial Trend Chart**: Interactive SVG area chart tracking your financial trajectory across 1W, 1M, 3M, 6M, 1Y, and ALL timeframes. Dynamically toggles between Total Net Liquidity, specific bank accounts, expenses-only, or incomes-only.
-- **Segmented Clean Navigation**: Clean tabbed dashboard (*Overview, Accounts, Ledger, Notes & Dues, Statement Reconciliation*) that keeps mobile and desktop layouts clutter-free.
-- **Daily Recordkeeping**: Prominent dashboard buttons for **Add Expense**, **Add Income**, and **Transfer Money**.
-- **Atomic Two-Way Transfers**: Moving money between accounts updates both balances in a single atomic transaction.
-- **Bank Statement Reconciliation**: Distinguishes calculated ledger balances from actual bank balances entered during statement check-ins, highlighting exact discrepancies (`₹0 difference` for balanced accounts).
-- **Searchable, Date-Filterable Ledger**: Search by description, category, amount, or account. Filter by presets (*Today, Yesterday, This Week, This Month, Last Month, Custom Date Range*).
-- **Offline-First with IndexedDB**: Full functionality when disconnected from the internet. All entries save instantly to your browser's IndexedDB.
-- **Bidirectional Cloud Sync**: Flushes offline changes to Supabase and pulls remote updates when online.
-- **Cloud-Linked Offline Mode**: In offline mode, link to your online Supabase account to import accounts and sync mutations bidirectionally.
-- **Data Portability**: Instant CSV export, complete JSON database backup, and schema-validated JSON restore.
-- **Transaction Audit Trail**: Immutable chronological log of all creations, edits, deletions, and reconciliations, synced across cloud devices.
-- **UPI & Bank Auto-Sync Teaser**: Modern preview card for planned on-device SMS and PDF statement parsing.
+### 🚀 Progressive Web App (PWA) & Offline-First Core
+- **1-Tap Home Screen Install**: Full PWA support (`manifest.json` + `sw.js`) allowing installation on Android, iOS, Windows, and macOS as a standalone native app with zero browser URL bar distractions.
+- **Offline-First IndexedDB Engine**: Full offline functionality. Every transaction, note, contact, and balance modification persists locally and queues for automatic cloud synchronization.
+- **Cache-Busted Service Worker**: Automated cache invalidation (`sd-ledger-cache-v5`) ensuring offline capability and instant asset updates.
+
+### 💬 WhatsApp Dues Reminders & 1-Tap Nudges
+- **Instant WhatsApp Deep Links**: 1-click reminders via `wa.me` pre-populated with customized messages.
+- **Multiple Tone Templates**: Choose between **Polite**, **Casual**, **Direct**, or **Formal** reminder tones.
+- **Embedded NPCI UPI Payload**: Reminders automatically bundle your UPI payment deep link so friends can tap and settle in seconds via Google Pay, PhonePe, or Paytm.
+- **Partial Settlement & Khata Tracking**: Track multi-step repayments with complete audit trails, balance updates, and optional automatic ledger conversion.
+
+### 💳 UPI Integration & Live Dynamic QR Codes
+- **NPCI Standard Pay URI**: Encodes `upi://pay?pa=<UPI_ID>&pn=<NAME>&am=<AMOUNT>&cu=INR&tn=<NOTE>` for universal compatibility across Indian payment apps.
+- **Live Dynamic QR Code**: Real-time on-screen QR generation for any custom amount or due note with instant 1-tap copy link.
+- **Dual-Synced UPI Profile**: Automatically syncs UPI VPA across `user_profiles` database table and Supabase Auth `user_metadata` for seamless cross-device availability upon login.
+
+### 📇 Saved Contacts & Mobile Phonebook Directory
+- **Auto-Capture on Note Creation**: Automatically registers and updates friend names and phone numbers when saving notes.
+- **Native Mobile Contact Picker**: Tap **Import from Contacts** on mobile devices (`navigator.contacts.select`) to instantly select a friend from your phone's native address book.
+- **Dedicated Saved Contacts Modal**: Search, edit, message, or delete saved contacts with 1-click WhatsApp messaging and calling.
+- **Cross-Device Cloud Sync**: Stored in `user_contacts` table in Supabase and IndexedDB locally.
+
+### 🛡️ Master Admin Control Panel (`deysagar1999@gmail.com`)
+- **Exclusive Master Access**: Securely gated specifically to the designated master administrator.
+- **User Directory & Insights**: View all registered accounts, user IDs, registration dates, and last sign-in timestamps.
+- **Account Moderation (Block/Unblock)**: 1-click instant account suspension that immediately prevents blocked users from logging in or syncing data.
+- **Direct Password Overrides**: Secure server-side API (`/api/admin/users`) powered by Supabase Service Role Key to reset user passwords directly.
+- **Direct User Account Provisioning**: Create new user credentials directly from the master admin console.
+
+### 🎨 Vector Brand Identity & Multi-Resolution App Icons
+- **Vector Brand Icon (`icon.svg`)**: Bespoke emerald-cyan gradient rounded stroke border, ambient radial glow, peeking statement tab, and embossed "SD" monogram.
+- **Crisp Retina Browser Favicon**: Direct SVG favicon served dynamically via Next.js App Router for lossless clarity in browser tabs.
+- **Multi-Resolution Desktop Icon**: Custom 16×16, 32×32, and 48×48 multi-layered `.ico` file ensuring pristine rendering on Windows taskbars and desktop shortcuts.
+
+### 📱 Viewport & Touch-Optimized Interface
+- **Mobile-Friendly Modals**: Sticky top headers with guaranteed close cross (`X`) button visibility, pinned action footers, and smooth momentum scrolling (`overscroll-contain`) adapted to dynamic viewport heights (`92dvh`).
+- **Segmented Clean Navigation**: Clean tabbed dashboard (*Overview & Trends, Accounts, Transactions, Notes & Dues, Reconcile*) optimized for both mobile screens and wide desktop displays.
+
+### 📊 Comprehensive Bank Ledger & Statement Reconciliation
+- **Personal Account Management**: Starts with your first personal accounts and allows unlimited additions (*HDFC, SBI, Cash Wallet, Salary, Business Accounts*).
+- **Atomic Two-Way Transfers**: Moving money between accounts atomically credits one and debits the other in a single unified entry.
+- **Statement Reconciliation**: Contrast calculated ledger balances against actual bank statement balances, highlighting discrepancies (`₹0 difference` for balanced accounts).
+- **Groww-Style Financial Trajectory Chart**: Interactive SVG area chart tracking net liquidity across 1W, 1M, 3M, 6M, 1Y, and All-Time.
+- **Data Portability & Audit Trail**: Complete JSON database backup/restore, CSV exports, and immutable chronological audit logs.
 
 ---
 
