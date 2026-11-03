@@ -631,8 +631,8 @@ export function Dashboard({ onOpenAuth }: DashboardProps) {
             </div>
           )}
 
-          {/* PROMINENT DAILY RECORDKEEPING QUICK ACTION BUTTONS */}
-          <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 sm:p-5 shadow-lg dark:shadow-xl">
+          {/* PROMINENT DAILY RECORDKEEPING QUICK ACTION BUTTONS (Hidden on mobile as it's in bottom dock) */}
+          <div className="hidden sm:block rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-4 sm:p-5 shadow-lg dark:shadow-xl">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <h3 className="text-sm font-bold text-zinc-900 dark:text-white">Daily Recordkeeping</h3>

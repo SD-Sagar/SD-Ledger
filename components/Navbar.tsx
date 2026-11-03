@@ -392,20 +392,6 @@ export function Navbar({
                         </>
                       )}
 
-                      {!isDemoUser && (
-                        <button
-                          onClick={() => {
-                            setShowMoreMenu(false);
-                            handlePushClick();
-                          }}
-                          disabled={isPushingCloud}
-                          className="w-full flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left disabled:opacity-50"
-                        >
-                          <CloudUpload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 ${isPushingCloud ? 'animate-spin' : ''}`} />
-                          <span>Push Local Data to Cloud</span>
-                        </button>
-                      )}
-
                       <button
                         onClick={() => {
                           setShowMoreMenu(false);
@@ -528,6 +514,66 @@ export function Navbar({
                               Manage users, passwords, block/unblock
                             </span>
                           </div>
+                        </button>
+                      )}
+
+                      {/* Backup / Export & Restore */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          onOpenBackup();
+                        }}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
+                      >
+                        <Download className="h-4 w-4 text-teal-600 dark:text-teal-400 shrink-0" />
+                        <div>
+                          <span>Backup / Export</span>
+                          <span className="block text-[10px] text-zinc-400 font-normal">
+                            CSV export &amp; JSON account restore
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Audit Trail Log */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowUserDropdown(false);
+                          onOpenAuditTrail();
+                        }}
+                        className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
+                      >
+                        <ShieldCheck className="h-4 w-4 text-indigo-500 dark:text-indigo-400 shrink-0" />
+                        <div>
+                          <span>Audit Trail Log</span>
+                          <span className="block text-[10px] text-zinc-400 font-normal">
+                            Activity timeline &amp; edit tracking
+                          </span>
+                        </div>
+                      </button>
+
+                      {/* Live Sync Pull (Offline / Demo mode) */}
+                      {isDemoUser && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            handlePullClick();
+                          }}
+                          disabled={isPulling || syncStatus.isSyncing}
+                          className="w-full flex items-center justify-between rounded-xl px-3 py-2 text-xs font-medium text-cyan-700 dark:text-cyan-300 hover:bg-cyan-50 dark:hover:bg-cyan-950/40 transition-colors text-left cursor-pointer disabled:opacity-50"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <CloudDownload className={`h-4 w-4 text-cyan-600 dark:text-cyan-400 shrink-0 ${isPulling ? 'animate-bounce' : ''}`} />
+                            <div>
+                              <span>Live Sync (Pull Cloud)</span>
+                              <span className="block text-[10px] text-zinc-400 font-normal">
+                                Refresh latest cloud balances
+                              </span>
+                            </div>
+                          </div>
+                          {isPulling && <span className="text-[10px] text-cyan-500 animate-pulse">Pulling...</span>}
                         </button>
                       )}
 
