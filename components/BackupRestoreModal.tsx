@@ -49,6 +49,16 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  // Close on Escape key
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   const handleForcePush = async () => {
@@ -124,43 +134,54 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-6 shadow-2xl transition-colors">
-        {/* Header */}
-        <div className="flex items-center justify-between pb-4 border-b border-zinc-200 dark:border-zinc-800">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400">
-              <Database className="h-4 w-4" />
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-lg max-h-[92vh] max-h-[92dvh] flex flex-col rounded-2xl sm:rounded-3xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl text-zinc-900 dark:text-zinc-100 animate-in zoom-in-95 duration-200 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header - Fixed & Sticky at top with shrink-0 */}
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-zinc-100 dark:border-zinc-800 shrink-0 bg-white dark:bg-zinc-950 z-10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 ring-1 ring-teal-500/30 shrink-0">
+              <Database className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
-            <div>
-              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Data Backup & Export</h2>
-              <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-bold text-zinc-900 dark:text-white truncate">
+                Data Backup &amp; Export
+              </h2>
+              <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">
                 Full offline ownership of your financial records
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors"
+            className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 hover:text-zinc-900 dark:hover:text-white transition-colors shrink-0 ml-2 cursor-pointer"
+            aria-label="Close modal"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {error && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-800 dark:text-rose-300">
-            <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-            <span>{error}</span>
-          </div>
-        )}
-        {success && (
-          <div className="mt-4 flex items-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs text-emerald-800 dark:text-emerald-300">
-            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <span>{success}</span>
-          </div>
-        )}
+        {/* Scrollable Content Body */}
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 overscroll-contain flex-1">
+          {error && (
+            <div className="flex items-center gap-2 rounded-xl border border-rose-300 dark:border-rose-900/60 bg-rose-50 dark:bg-rose-950/40 p-3 text-xs text-rose-800 dark:text-rose-300">
+              <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
+              <span>{error}</span>
+            </div>
+          )}
+          {success && (
+            <div className="flex items-center gap-2 rounded-xl border border-emerald-300 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/40 p-3 text-xs text-emerald-800 dark:text-emerald-300">
+              <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <span>{success}</span>
+            </div>
+          )}
 
-        <div className="mt-4 space-y-4">
           {/* Section 1: Exports */}
           <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50/70 dark:bg-zinc-900/40 p-4 space-y-3 transition-colors">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
@@ -172,9 +193,9 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               <button
                 type="button"
                 onClick={exportCSV}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-center transition-all hover:border-emerald-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-sm cursor-pointer"
+                className="flex sm:flex-col items-center sm:justify-center gap-3 sm:gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-left sm:text-center transition-all hover:border-emerald-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-2xs cursor-pointer"
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 shrink-0">
                   <FileSpreadsheet className="h-4 w-4" />
                 </div>
                 <div>
@@ -191,9 +212,9 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               <button
                 type="button"
                 onClick={exportNotesCSV}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-center transition-all hover:border-amber-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-sm cursor-pointer"
+                className="flex sm:flex-col items-center sm:justify-center gap-3 sm:gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-left sm:text-center transition-all hover:border-amber-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-2xs cursor-pointer"
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
                   <FileSpreadsheet className="h-4 w-4" />
                 </div>
                 <div>
@@ -210,9 +231,9 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               <button
                 type="button"
                 onClick={exportJSON}
-                className="flex flex-col items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-center transition-all hover:border-teal-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-sm cursor-pointer"
+                className="flex sm:flex-col items-center sm:justify-center gap-3 sm:gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-3 text-left sm:text-center transition-all hover:border-teal-500/50 hover:bg-zinc-50 dark:hover:bg-zinc-800/80 shadow-2xs cursor-pointer"
               >
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-teal-500/10 text-teal-600 dark:text-teal-400 shrink-0">
                   <FileJson className="h-4 w-4" />
                 </div>
                 <div>
@@ -232,7 +253,7 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
             <h3 className="text-xs font-semibold uppercase tracking-wider text-zinc-700 dark:text-zinc-300">
               Restore from Backup
             </h3>
-            <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+            <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-relaxed">
               Select a previously exported SD-Ledger JSON backup file to restore. All accounts, transactions, friend dues, contacts, and UPI details will be completely restored without leaving anything behind.
             </p>
 
@@ -310,12 +331,23 @@ export function BackupRestoreModal({ isOpen, onClose }: BackupRestoreModalProps)
               type="button"
               disabled={isPushing}
               onClick={handleForcePush}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 py-2.5 text-xs font-semibold text-white shadow-md transition-colors disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 py-2.5 px-4 text-xs font-semibold text-white shadow-md transition-colors disabled:opacity-50 cursor-pointer"
             >
-              <CloudUpload className={`h-4 w-4 ${isPushing ? 'animate-spin' : ''}`} />
-              <span>{isPushing ? 'Uploading to Supabase...' : 'Push Localhost Ledger to Supabase Cloud'}</span>
+              <CloudUpload className={`h-4 w-4 shrink-0 ${isPushing ? 'animate-spin' : ''}`} />
+              <span className="truncate">{isPushing ? 'Uploading to Supabase...' : 'Push Localhost Ledger to Supabase Cloud'}</span>
             </button>
           </div>
+        </div>
+
+        {/* Footer - Fixed at bottom */}
+        <div className="flex items-center justify-end px-4 py-3 sm:px-6 sm:py-3.5 border-t border-zinc-100 dark:border-zinc-800 shrink-0 bg-zinc-50/90 dark:bg-zinc-900/60 backdrop-blur-xs">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-4 py-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors cursor-pointer"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
