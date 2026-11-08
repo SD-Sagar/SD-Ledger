@@ -98,7 +98,8 @@ export function TransactionHistory({
 
       case 'this_month': {
         const firstDay = `${todayStr.substring(0, 7)}-01`;
-        return { start: firstDay, end: todayStr };
+        const lastDayMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { start: firstDay, end: formatYMD(lastDayMonth) };
       }
 
       case 'last_month': {
@@ -117,8 +118,8 @@ export function TransactionHistory({
 
       case 'all':
       default:
-        // Capped to the 6-month limit
-        return { start: sixMonthsAgoStr, end: todayStr };
+        // Capped to the 6-month limit (from 6 months ago onwards)
+        return { start: sixMonthsAgoStr, end: '' };
     }
   }, [datePreset, todayStr, sixMonthsAgoStr, customStartDate, customEndDate]);
 

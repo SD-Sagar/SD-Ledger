@@ -80,19 +80,24 @@ CREATE TABLE IF NOT EXISTS public.financial_notes (
     is_resolved BOOLEAN NOT NULL DEFAULT false,
     resolved_at TIMESTAMPTZ,
     resolved_transaction_id TEXT,
+    linked_transaction_id TEXT,
+    is_deleted BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Safe migrations for existing financial_notes tables (partial settlements & WhatsApp contact):
+-- Safe migrations for existing financial_notes tables (partial settlements, linked transactions, soft deletes & WhatsApp contact):
 ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS original_amount NUMERIC(12, 2);
 ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS payment_history JSONB DEFAULT '[]'::jsonb;
 ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS phone_number TEXT;
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS linked_transaction_id TEXT;
+ALTER TABLE public.financial_notes ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN NOT NULL DEFAULT false;
 
 -- ------------------------------------------------------------------------------
--- INDEXES FOR MAXIMUM QUERY PERFORMANCE
+-- INDEXES FOR MAXIMUM QUERY PERFORMANCE & INTEGRITY
 -- ------------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS idx_accounts_user ON public.accounts(user_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_user_display_name_unique ON public.accounts(user_id, lower(trim(display_name))) WHERE is_active = true;
 CREATE INDEX IF NOT EXISTS idx_transactions_user_date ON public.transactions(user_id, transaction_date DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_from_acc ON public.transactions(from_account_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_to_acc ON public.transactions(to_account_id);

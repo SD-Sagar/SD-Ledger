@@ -16,6 +16,7 @@ export const EXPENSE_CATEGORIES = [
   { id: 'Personal Care', label: 'Personal Care', icon: 'Sparkles', color: '#d946ef' },
   { id: 'Investments / SIP', label: 'Investments / SIP', icon: 'TrendingUp', color: '#14b8a6' },
   { id: 'Gifts & Charity', label: 'Gifts & Charity', icon: 'Gift', color: '#f43f5e' },
+  { id: 'Lending & Dues', label: 'Lending & Dues', icon: 'HandCoins', color: '#0ea5e9' },
   { id: 'Other Expense', label: 'Other Expense', icon: 'MoreHorizontal', color: '#64748b' },
 ] as const;
 
@@ -28,6 +29,7 @@ export const INCOME_SOURCES = [
   { id: 'Cashback & Refunds', label: 'Cashback & Refunds', icon: 'RotateCcw', color: '#f59e0b' },
   { id: 'Rental Income', label: 'Rental Income', icon: 'Key', color: '#14b8a6' },
   { id: 'Gifts & Allowance', label: 'Gifts & Allowance', icon: 'Gift', color: '#ec4899' },
+  { id: 'Debt Recovery / Khata', label: 'Debt Recovery / Khata', icon: 'HandCoins', color: '#10b981' },
   { id: 'Other Income', label: 'Other Income', icon: 'PlusCircle', color: '#64748b' },
 ] as const;
 

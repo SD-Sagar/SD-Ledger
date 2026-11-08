@@ -226,11 +226,18 @@ export function BrandLogo({
 
             {/* Optional Tagline Badge */}
             {showBadge && (
-              <span
-                className={`hidden md:inline-flex items-center rounded-full bg-emerald-500/10 font-bold text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/25 shrink-0 ${sizeConfig.badge}`}
-              >
-                Personal Bank Ledger
-              </span>
+              <>
+                <span
+                  className={`hidden md:inline-flex items-center rounded-full bg-emerald-500/10 font-bold text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/25 shrink-0 ${sizeConfig.badge}`}
+                >
+                  Personal Bank Ledger V.2
+                </span>
+                <span
+                  className="md:hidden inline-flex items-center rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700 dark:text-emerald-300 ring-1 ring-inset ring-emerald-500/25 shrink-0"
+                >
+                  V2
+                </span>
+              </>
             )}
           </div>
 

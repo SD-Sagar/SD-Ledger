@@ -82,6 +82,8 @@ export interface FinancialNote {
   is_resolved: boolean;
   resolved_at?: string | null;
   resolved_transaction_id?: string | null;
+  linked_transaction_id?: string | null; // Transaction ID created upon initial lending/borrowing
+  is_deleted?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -101,6 +103,7 @@ export interface SavedContact {
 
 export interface SyncQueueItem {
   id: string;
+  user_id?: string;
   table: 'accounts' | 'transactions' | 'reconciliations' | 'audit_logs' | 'financial_notes';
   action: 'UPSERT' | 'DELETE';
   payload: Record<string, unknown>;

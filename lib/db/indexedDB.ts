@@ -163,6 +163,28 @@ export async function idbUnmarkTransactionDeleted(txId: string, userId: string):
   await idbSetMeta(key, filtered);
 }
 
+// ---------------------- NOTE DELETION TRACKING ----------------------
+export async function idbMarkNoteDeleted(noteId: string, userId: string): Promise<void> {
+  const key = `deleted_notes_${userId}`;
+  const existing = (await idbGetMeta<string[]>(key)) || [];
+  if (!existing.includes(noteId)) {
+    existing.push(noteId);
+    await idbSetMeta(key, existing);
+  }
+}
+
+export async function idbGetDeletedNoteIds(userId: string): Promise<string[]> {
+  const key = `deleted_notes_${userId}`;
+  return (await idbGetMeta<string[]>(key)) || [];
+}
+
+export async function idbUnmarkNoteDeleted(noteId: string, userId: string): Promise<void> {
+  const key = `deleted_notes_${userId}`;
+  const existing = (await idbGetMeta<string[]>(key)) || [];
+  const filtered = existing.filter((id) => id !== noteId);
+  await idbSetMeta(key, filtered);
+}
+
 export async function idbDeleteAccount(id: string, userId: string): Promise<void> {
   await idbMarkAccountDeleted(id, userId);
   const db = await getDB();
@@ -512,11 +534,12 @@ export async function idbGetNotes(userId: string): Promise<FinancialNote[]> {
 
     request.onsuccess = () => {
       const list = (request.result as FinancialNote[]) || [];
-      list.sort((a, b) => {
+      const active = list.filter((n) => !n.is_deleted);
+      active.sort((a, b) => {
         if (a.is_pinned !== b.is_pinned) return a.is_pinned ? -1 : 1;
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       });
-      resolve(list);
+      resolve(active);
     };
     request.onerror = () => reject(request.error);
   });
@@ -545,13 +568,36 @@ export async function idbSaveNotes(notes: FinancialNote[]): Promise<void> {
 }
 
 export async function idbDeleteNote(id: string, userId: string): Promise<void> {
+  await idbMarkNoteDeleted(id, userId);
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('financial_notes', 'readwrite');
     const store = tx.objectStore('financial_notes');
-    const request = store.delete(id);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
+    const getReq = store.get(id);
+
+    getReq.onsuccess = () => {
+      const item = getReq.result as FinancialNote | undefined;
+      if (item && item.user_id === userId) {
+        item.is_deleted = true;
+        item.updated_at = new Date().toISOString();
+        store.put(item);
+      } else {
+        store.delete(id);
+      }
+      resolve();
+    };
+    getReq.onerror = () => reject(getReq.error);
+  });
+}
+
+export async function idbHardDeleteNote(id: string): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('financial_notes', 'readwrite');
+    const store = tx.objectStore('financial_notes');
+    const req = store.delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
   });
 }
 
@@ -609,6 +655,19 @@ export async function idbRestoreDatabase(userId: string, backup: FullDatabaseBac
     saveStoredUpiSettings(backup.upiSettings);
   }
 
+  // Clean wipe existing records for this user first to prevent duplicate accounts and ghost transactions
+  await idbClearUserData(userId);
+
+  // Deduplicate accounts from backup by normalized name
+  const deduplicatedAccountsMap = new Map<string, Account>();
+  for (const acc of backup.accounts) {
+    const key = acc.display_name.trim().toLowerCase();
+    if (!deduplicatedAccountsMap.has(key)) {
+      deduplicatedAccountsMap.set(key, acc);
+    }
+  }
+  const cleanAccounts = Array.from(deduplicatedAccountsMap.values());
+
   const db = await getDB();
   return new Promise((resolve, reject) => {
     const storeNames = ['accounts', 'transactions', 'reconciliations', 'audit_logs'] as string[];
@@ -624,7 +683,7 @@ export async function idbRestoreDatabase(userId: string, backup: FullDatabaseBac
     const noteStore = db.objectStoreNames.contains('financial_notes') ? tx.objectStore('financial_notes') : null;
 
     // Assign current user_id to avoid permission mismatch
-    backup.accounts.forEach((acc) => {
+    cleanAccounts.forEach((acc) => {
       accStore.put({ ...acc, user_id: userId });
     });
 

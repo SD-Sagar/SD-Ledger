@@ -451,6 +451,15 @@ export function FinancialTrendChart({ accounts, transactions }: FinancialTrendCh
       predefinedMap.set(c.label.toLowerCase(), { label: c.label, color: c.color });
       predefinedMap.set(c.id.toLowerCase(), { label: c.label, color: c.color });
     });
+    // Support common aliases for friend dues and khata settlements
+    if (isIncome) {
+      predefinedMap.set('debt repayment / khata', { label: 'Debt Recovery / Khata', color: '#10b981' });
+      predefinedMap.set('debt recovery / khata', { label: 'Debt Recovery / Khata', color: '#10b981' });
+    } else {
+      predefinedMap.set('lending / dues', { label: 'Lending & Dues', color: '#0ea5e9' });
+      predefinedMap.set('lending & dues', { label: 'Lending & Dues', color: '#0ea5e9' });
+      predefinedMap.set('borrowing / dues', { label: 'Lending & Dues', color: '#0ea5e9' });
+    }
 
     const targetAccountIds = selectedAccountId === 'ALL'
       ? null

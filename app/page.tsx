@@ -147,7 +147,7 @@ function MainAppContent() {
           <div className="flex items-center gap-2">
             <span className="font-semibold text-zinc-700 dark:text-zinc-400">SD-Ledger</span>
             <span>&bull;</span>
-            <span>Personal Bank Ledger</span>
+            <span>Personal Bank Ledger V.2</span>
             <span>&bull;</span>
             <span className="text-emerald-600 dark:text-emerald-400/80">Timezone: Asia/Kolkata (IST)</span>
           </div>

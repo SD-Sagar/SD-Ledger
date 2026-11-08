@@ -43,6 +43,9 @@ import {
   idbRemapQueueAccountId,
   idbGetDeletedTransactionIds,
   idbMarkTransactionDeleted,
+  idbGetDeletedNoteIds,
+  idbMarkNoteDeleted,
+  idbHardDeleteNote,
 } from '../lib/db/indexedDB';
 import { processSync, SyncResult } from '../lib/db/syncEngine';
 import { computeLedgerSummary } from '../lib/ledger/balanceEngine';
@@ -172,6 +175,10 @@ interface LedgerContextType {
     due_date?: string;
     card_color?: NoteColor;
     is_pinned?: boolean;
+    deductFromAccountId?: string;
+    depositToAccountId?: string;
+    transactionDate?: string;
+    transactionCategory?: string;
   }) => Promise<{ success: boolean; note?: FinancialNote; error?: string }>;
 
   updateNote: (
@@ -190,6 +197,7 @@ interface LedgerContextType {
       transactionDate?: string;
       settleAmount?: number;
       paymentNotes?: string;
+      category?: string;
     }
   ) => Promise<{ success: boolean; isFullySettled?: boolean; transactionId?: string; error?: string }>;
 
@@ -215,9 +223,9 @@ const LedgerContext = createContext<LedgerContextType | undefined>(undefined);
 async function safeSyncNoteToSupabase(
   note: FinancialNote,
   operation: 'insert' | 'upsert' = 'upsert'
-): Promise<void> {
+): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase || !navigator.onLine) return;
+  if (!supabase || !navigator.onLine) return false;
 
   const toPayload = (includeExtended: boolean): Record<string, unknown> => {
     const base: Record<string, unknown> = {
@@ -241,6 +249,8 @@ async function safeSyncNoteToSupabase(
       if (note.original_amount !== undefined) base.original_amount = note.original_amount;
       if (note.payment_history !== undefined) base.payment_history = note.payment_history;
       if (note.phone_number !== undefined) base.phone_number = note.phone_number;
+      if (note.linked_transaction_id !== undefined) base.linked_transaction_id = note.linked_transaction_id;
+      if (note.is_deleted !== undefined) base.is_deleted = note.is_deleted;
     }
 
     return base;
@@ -253,36 +263,37 @@ async function safeSyncNoteToSupabase(
         ? await supabase.from('financial_notes').insert(fullPayload)
         : await supabase.from('financial_notes').upsert(fullPayload, { onConflict: 'id' });
 
-    if (error) {
-      const msg = error.message || '';
-      // If Supabase schema does not have the extended columns yet, automatically fallback to base schema
-      if (
-        msg.includes('schema cache') ||
-        msg.includes('original_amount') ||
-        msg.includes('payment_history') ||
-        msg.includes('phone_number') ||
-        error.code === 'PGRST204'
-      ) {
-        const basePayload = toPayload(false);
-        const fallbackRes =
-          operation === 'insert'
-            ? await supabase.from('financial_notes').insert(basePayload)
-            : await supabase.from('financial_notes').upsert(basePayload, { onConflict: 'id' });
+    if (!error) return true;
 
-        if (fallbackRes.error) {
-          console.warn('Fallback note cloud sync failed:', fallbackRes.error.message);
-        } else {
-          console.info(
-            'Note synced to Supabase with base schema. Run ALTER TABLE migration to enable cloud sync of partial settlements & contact numbers.'
-          );
-        }
-        return;
+    const msg = error.message || '';
+    // If Supabase schema does not have the extended columns yet, automatically fallback to base schema
+    if (
+      msg.includes('schema cache') ||
+      msg.includes('original_amount') ||
+      msg.includes('payment_history') ||
+      msg.includes('phone_number') ||
+      msg.includes('linked_transaction_id') ||
+      msg.includes('is_deleted') ||
+      error.code === 'PGRST204'
+    ) {
+      const basePayload = toPayload(false);
+      const fallbackRes =
+        operation === 'insert'
+          ? await supabase.from('financial_notes').insert(basePayload)
+          : await supabase.from('financial_notes').upsert(basePayload, { onConflict: 'id' });
+
+      if (!fallbackRes.error) {
+        return true;
       }
-
-      console.warn(`Could not sync note to cloud (${operation}):`, error.message);
+      console.warn('Fallback note cloud sync failed:', fallbackRes.error.message);
+      return false;
     }
+
+    console.warn(`Could not sync note to cloud (${operation}):`, error.message);
+    return false;
   } catch (cloudErr) {
     console.warn(`Could not sync note to cloud (${operation}):`, cloudErr);
+    return false;
   }
 }
 
@@ -399,41 +410,152 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
           // RECOVERY & MIRROR FOR FINANCIAL NOTES (Auto-pruning resolved notes > 5 days)
           const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
           const remoteNoteMap = new Map<string, FinancialNote>();
+          const deletedNoteIds = new Set<string>([
+            ...(await idbGetDeletedNoteIds(uid)),
+            ...(await idbGetDeletedNoteIds(DEMO_USER_ID)),
+          ]);
+          const currentQueue = await idbGetSyncQueue();
+          currentQueue
+            .filter((q) => q.table === 'financial_notes' && (q.action === 'DELETE' || (q.payload as { is_deleted?: boolean })?.is_deleted))
+            .forEach((q) => {
+              const targetId = (q.payload as { id: string })?.id;
+              if (targetId) deletedNoteIds.add(targetId);
+            });
+
+          const pendingNoteUpsertIds = new Set(
+            currentQueue
+              .filter((q) => q.table === 'financial_notes' && q.action === 'UPSERT')
+              .map((q) => (q.payload as { id: string })?.id)
+              .filter(Boolean)
+          );
 
           if (notesRes.data) {
             for (const rn of notesRes.data as FinancialNote[]) {
+              if (deletedNoteIds.has(rn.id) || rn.is_deleted) {
+                await supabase.from('financial_notes').delete().eq('id', rn.id);
+                await idbHardDeleteNote(rn.id);
+                continue;
+              }
+
               const isResolved = Boolean(rn.is_resolved);
               const resolvedTime = new Date(rn.resolved_at || rn.updated_at || rn.created_at || 0).getTime();
               const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
 
               if (isExpired) {
                 await supabase.from('financial_notes').delete().eq('id', rn.id);
-                await idbDeleteNote(rn.id, uid);
+                await idbHardDeleteNote(rn.id);
               } else {
                 remoteNoteMap.set(rn.id, rn);
+                await idbSaveNote(rn);
               }
             }
           }
 
           for (const ln of localNotes) {
+            if (deletedNoteIds.has(ln.id) || ln.is_deleted) {
+              await idbHardDeleteNote(ln.id);
+              continue;
+            }
+
             const isResolved = Boolean(ln.is_resolved);
             const resolvedTime = new Date(ln.resolved_at || ln.updated_at || ln.created_at || 0).getTime();
             const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
 
             if (isExpired) {
-              await idbDeleteNote(ln.id, uid);
+              await idbHardDeleteNote(ln.id);
               await supabase.from('financial_notes').delete().eq('id', ln.id);
               continue;
             }
 
             if (!remoteNoteMap.has(ln.id)) {
-              await safeSyncNoteToSupabase({ ...ln, user_id: uid }, 'upsert');
-              remoteNoteMap.set(ln.id, ln);
+              if (pendingNoteUpsertIds.has(ln.id)) {
+                await safeSyncNoteToSupabase({ ...ln, user_id: uid }, 'upsert');
+                remoteNoteMap.set(ln.id, ln);
+              } else {
+                // If it is missing from remote notes and not in pending queue, it was deleted on another device!
+                await idbHardDeleteNote(ln.id);
+              }
             }
           }
 
           if (accRes.data) {
-            await idbSaveAccounts(accRes.data as Account[]);
+            // Deduplicate accounts (both remote & local)
+            const localAccs = await idbGetAccounts(uid);
+            const rawAccounts = [...(accRes.data as Account[]), ...localAccs];
+
+            // Group by normalized name
+            const accGroupByName = new Map<string, Account[]>();
+            for (const a of rawAccounts) {
+              const key = a.display_name.trim().toLowerCase();
+              const grp = accGroupByName.get(key) || [];
+              if (!grp.some((existing) => existing.id === a.id)) {
+                grp.push(a);
+              }
+              accGroupByName.set(key, grp);
+            }
+
+            // Count transactions to identify active account
+            const allTxsForCounting = [
+              ...Array.from(remoteTxMap.values()),
+              ...localTxs,
+            ];
+            const txCountByAccId = new Map<string, number>();
+            for (const t of allTxsForCounting) {
+              if (t.from_account_id) {
+                txCountByAccId.set(t.from_account_id, (txCountByAccId.get(t.from_account_id) || 0) + 1);
+              }
+              if (t.to_account_id) {
+                txCountByAccId.set(t.to_account_id, (txCountByAccId.get(t.to_account_id) || 0) + 1);
+              }
+            }
+
+            const cleanAccounts: Account[] = [];
+            for (const [, group] of accGroupByName.entries()) {
+              if (group.length === 1) {
+                cleanAccounts.push(group[0]);
+                continue;
+              }
+
+              // Multiple accounts with same name! Sort by transaction count DESC, then opening_date ASC
+              group.sort((a, b) => {
+                const cntA = txCountByAccId.get(a.id) || 0;
+                const cntB = txCountByAccId.get(b.id) || 0;
+                if (cntB !== cntA) return cntB - cntA;
+                return (a.opening_date || '').localeCompare(b.opening_date || '');
+              });
+
+              const keeper = group[0];
+              cleanAccounts.push(keeper);
+
+              // Reassign and remove duplicate victim accounts
+              for (let i = 1; i < group.length; i++) {
+                const victim = group[i];
+                await idbUpdateTransactionAccountIds(victim.id, keeper.id, uid);
+                await idbUpdateTransactionAccountIds(victim.id, keeper.id, DEMO_USER_ID);
+                await idbUpdateReconciliationAccountIds(victim.id, keeper.id, uid);
+                await idbUpdateReconciliationAccountIds(victim.id, keeper.id, DEMO_USER_ID);
+                await idbRemapQueueAccountId(victim.id, keeper.id);
+                await idbDeleteAccount(victim.id, uid);
+                await idbDeleteAccount(victim.id, DEMO_USER_ID);
+
+                try {
+                  await supabase.from('accounts').delete().eq('id', victim.id);
+                } catch {
+                  // non-blocking
+                }
+              }
+            }
+
+            // Purge local ghost accounts from IndexedDB
+            const activeAccIds = new Set(cleanAccounts.map((a) => a.id));
+            for (const la of localAccs) {
+              if (!activeAccIds.has(la.id)) {
+                await idbDeleteAccount(la.id, uid);
+              }
+            }
+
+            cleanAccounts.sort((a, b) => (a.account_index || 0) - (b.account_index || 0));
+            await idbSaveAccounts(cleanAccounts);
           }
           if (txRes.data) {
             await idbSaveTransactions(Array.from(remoteTxMap.values()));
@@ -535,11 +657,16 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
                 }
               }
 
-              const offlineAccounts: Account[] = accRes.data.map((a: Account) => ({
-                ...a,
-                user_id: DEMO_USER_ID,
-              }));
-              await idbSaveAccounts(offlineAccounts);
+              // Deduplicate by normalized name
+              const dedupMap = new Map<string, Account>();
+              for (const a of accRes.data as Account[]) {
+                const key = a.display_name.trim().toLowerCase();
+                if (!dedupMap.has(key)) {
+                  dedupMap.set(key, { ...a, user_id: DEMO_USER_ID });
+                }
+              }
+
+              await idbSaveAccounts(Array.from(dedupMap.values()));
             }
 
             if (txRes.data) {
@@ -792,13 +919,17 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         remoteById.set(a.id, a);
       });
 
-      // 2. Fetch local accounts from this user AND demo store
+      // 2. Fetch local accounts from this user (or demo store if user has no accounts yet)
       const userAccs = await idbGetAccounts(effectiveUid);
-      const demoAccs = await idbGetAccounts(DEMO_USER_ID);
-      const allLocalAccs = [...userAccs, ...demoAccs];
+      let localSourceAccs = userAccs;
+      if (userAccs.length === 0 && effectiveUid !== DEMO_USER_ID) {
+        const demoAccs = await idbGetAccounts(DEMO_USER_ID);
+        localSourceAccs = demoAccs;
+      }
       const localAccMap = new Map<string, Account>();
-      allLocalAccs.forEach((a) => {
-        if (!localAccMap.has(a.id)) localAccMap.set(a.id, a);
+      localSourceAccs.forEach((a) => {
+        const normKey = a.display_name.trim().toLowerCase();
+        if (!localAccMap.has(normKey)) localAccMap.set(normKey, a);
       });
 
       // Push or link accounts
@@ -816,11 +947,12 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
           if (!insErr) {
             accountIdMapping.set(local.id, local.id);
             remoteById.set(local.id, cleanAcc);
+            remoteByName.set(normName, cleanAcc);
           }
         }
       }
 
-      // 3. Gather all local transactions from this user AND demo store (excluding deleted)
+      // 3. Gather local transactions (excluding deleted)
       const deletedTxIds = new Set<string>([
         ...(await idbGetDeletedTransactionIds(effectiveUid)),
         ...(await idbGetDeletedTransactionIds(DEMO_USER_ID)),
@@ -831,10 +963,12 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       }
 
       const userTxs = await idbGetTransactions(effectiveUid);
-      const demoTxs = await idbGetTransactions(DEMO_USER_ID);
-      const allLocalTxs = [...userTxs, ...demoTxs];
+      let localSourceTxs = userTxs;
+      if (userTxs.length === 0 && effectiveUid !== DEMO_USER_ID) {
+        localSourceTxs = await idbGetTransactions(DEMO_USER_ID);
+      }
       const txMap = new Map<string, Transaction>();
-      allLocalTxs.forEach((t) => {
+      localSourceTxs.forEach((t) => {
         if (!txMap.has(t.id) && !t.is_deleted && !deletedTxIds.has(t.id)) txMap.set(t.id, t);
       });
 
@@ -1248,13 +1382,18 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     startDate?: string;
   }): Promise<{ success: boolean; error?: string }> => {
     if (!userId) return { success: false, error: 'User is not logged in.' };
-    if (!data.name.trim()) return { success: false, error: 'Please enter an account name.' };
+    const trimmedName = data.name?.trim();
+    if (!trimmedName) return { success: false, error: 'Please enter an account name.' };
+
+    if (accounts.some((a) => a.display_name.trim().toLowerCase() === trimmedName.toLowerCase())) {
+      return { success: false, error: `An account named "${trimmedName}" already exists.` };
+    }
 
     const nowIso = new Date().toISOString();
     const newAccount: Account = {
       id: generateUUID(),
       user_id: userId,
-      display_name: data.name.trim(),
+      display_name: trimmedName,
       opening_balance: Number(data.balance) || 0,
       opening_date: data.startDate || getTodayKolkata(),
       is_active: true,
@@ -1266,18 +1405,23 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveAccount(newAccount);
 
+    let accSynced = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('accounts').insert(newAccount);
+          const { error } = await supabase.from('accounts').insert(newAccount);
+          if (!error) accSynced = true;
         } catch (cloudErr) {
           console.warn('Could not insert account directly to Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!accSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'accounts',
         action: 'UPSERT',
         payload: newAccount as unknown as Record<string, unknown>,
@@ -1314,21 +1458,26 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbDeleteAccount(accountId, userId);
 
+    let accDeleted = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('accounts').delete().eq('id', accountId);
+          const { error } = await supabase.from('accounts').delete().eq('id', accountId);
+          if (!error) accDeleted = true;
         } catch (cloudErr) {
           console.warn('Could not delete account directly on Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!accDeleted) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'accounts',
         action: 'DELETE',
-        payload: { id: accountId },
+        payload: { id: accountId, user_id: userId },
         created_at: nowIso,
         retries: 0,
       });
@@ -1637,22 +1786,28 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveTransaction(tx);
 
+    let txSynced = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
           const { sync_status, ...cloudTx } = tx;
           const { error } = await supabase.from('transactions').insert(cloudTx);
-          if (error) {
+          if (!error) {
+            txSynced = true;
+          } else {
             console.error('Failed to insert expense into Supabase:', error.message);
           }
         } catch (cloudErr) {
           console.warn('Could not insert transaction to Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!txSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'transactions',
         action: 'UPSERT',
         payload: tx as unknown as Record<string, unknown>,
@@ -1717,22 +1872,28 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveTransaction(tx);
 
+    let txSynced = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
           const { sync_status, ...cloudTx } = tx;
           const { error } = await supabase.from('transactions').insert(cloudTx);
-          if (error) {
+          if (!error) {
+            txSynced = true;
+          } else {
             console.error('Failed to insert income into Supabase:', error.message);
           }
         } catch (cloudErr) {
           console.warn('Could not insert income to Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!txSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'transactions',
         action: 'UPSERT',
         payload: tx as unknown as Record<string, unknown>,
@@ -1799,22 +1960,28 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveTransaction(tx);
 
+    let txSynced = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
           const { sync_status, ...cloudTx } = tx;
           const { error } = await supabase.from('transactions').insert(cloudTx);
-          if (error) {
+          if (!error) {
+            txSynced = true;
+          } else {
             console.error('Failed to insert transfer into Supabase:', error.message);
           }
         } catch (cloudErr) {
           console.warn('Could not insert transfer to Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!txSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'transactions',
         action: 'UPSERT',
         payload: tx as unknown as Record<string, unknown>,
@@ -1864,22 +2031,28 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveTransaction(cleanUpdated);
 
+    let txSynced = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
           const { sync_status, ...cloudTx } = cleanUpdated;
           const { error } = await supabase.from('transactions').upsert(cloudTx);
-          if (error) {
+          if (!error) {
+            txSynced = true;
+          } else {
             console.error('Failed to update transaction in Supabase:', error.message);
           }
         } catch (cloudErr) {
           console.warn('Could not update transaction in Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!txSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'transactions',
         action: 'UPSERT',
         payload: cleanUpdated as unknown as Record<string, unknown>,
@@ -1914,6 +2087,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbDeleteTransaction(id, userId);
 
+    let txDeleted = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
@@ -1922,19 +2096,24 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             .from('transactions')
             .update({ is_deleted: true, updated_at: nowIso })
             .eq('id', id);
-          if (error) {
+          if (!error) {
+            txDeleted = true;
+          } else {
             console.error('Could not mark transaction deleted in Supabase:', error.message);
           }
         } catch (cloudErr) {
           console.warn('Could not mark transaction deleted in Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!txDeleted) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'transactions',
         action: 'DELETE',
-        payload: { id, is_deleted: true },
+        payload: { id, is_deleted: true, user_id: userId },
         created_at: nowIso,
         retries: 0,
       });
@@ -1985,18 +2164,23 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveReconciliation(rec);
 
+    let recSynced = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('reconciliations').insert(rec);
+          const { error } = await supabase.from('reconciliations').insert(rec);
+          if (!error) recSynced = true;
         } catch (cloudErr) {
           console.warn('Could not insert reconciliation to Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!recSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'reconciliations',
         action: 'UPSERT',
         payload: rec as unknown as Record<string, unknown>,
@@ -2087,6 +2271,10 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     due_date?: string;
     card_color?: NoteColor;
     is_pinned?: boolean;
+    deductFromAccountId?: string;
+    depositToAccountId?: string;
+    transactionDate?: string;
+    transactionCategory?: string;
   }): Promise<{ success: boolean; note?: FinancialNote; error?: string }> => {
     if (!userId) return { success: false, error: 'User is not logged in.' };
     if (!data.title?.trim()) return { success: false, error: 'Title or friend name is required.' };
@@ -2094,6 +2282,130 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
     const nowIso = new Date().toISOString();
     const noteId = generateUUID();
     const parsedAmount = data.amount ? Math.round(Number(data.amount) * 100) / 100 : null;
+
+    let linkedTxId: string | null = null;
+
+    // 1. Handle optional immediate ledger deduction when lending money
+    if (data.deductFromAccountId && parsedAmount && parsedAmount > 0) {
+      linkedTxId = generateUUID();
+      const txDate = data.transactionDate || data.due_date || getTodayKolkata();
+      const tx: Transaction = {
+        id: linkedTxId,
+        user_id: userId,
+        type: 'EXPENSE',
+        amount: parsedAmount,
+        transaction_date: txDate,
+        transaction_time: getCurrentTimeKolkata(),
+        from_account_id: data.deductFromAccountId,
+        to_account_id: null,
+        category: data.transactionCategory || 'Lending & Dues',
+        description: `Lent to ${data.title.trim()}${data.description ? ` (${data.description.trim()})` : ''}`,
+        created_at: nowIso,
+        updated_at: nowIso,
+        sync_status: userId === DEMO_USER_ID ? 'pending' : 'synced',
+      };
+      await idbSaveTransaction(tx);
+
+      let txSynced = false;
+      if (userId !== DEMO_USER_ID) {
+        const supabase = getSupabase();
+        if (supabase && navigator.onLine) {
+          try {
+            const { sync_status, ...cloudTx } = tx;
+            const { error: txErr } = await supabase.from('transactions').insert(cloudTx);
+            if (!txErr) txSynced = true;
+          } catch (e) {
+            console.warn('Could not sync lent transaction:', e);
+          }
+        }
+      }
+
+      if (!txSynced) {
+        await idbAddToSyncQueue({
+          id: generateUUID(),
+          user_id: userId,
+          table: 'transactions',
+          action: 'UPSERT',
+          payload: tx as unknown as Record<string, unknown>,
+          created_at: nowIso,
+          retries: 0,
+        });
+        markOfflineChange();
+      }
+
+      const acc = accounts.find((a) => a.id === data.deductFromAccountId);
+      await recordAuditLog({
+        id: generateUUID(),
+        user_id: userId,
+        action: 'CREATE',
+        entity_type: 'TRANSACTION',
+        entity_id: linkedTxId,
+        summary: `Lent ₹${parsedAmount.toFixed(2)} from ${acc?.display_name || 'Account'} to ${data.title.trim()}`,
+        details: { transaction: tx, noteId },
+        created_at: nowIso,
+      });
+    }
+
+    // 2. Handle optional immediate ledger deposit when borrowing money
+    if (data.depositToAccountId && parsedAmount && parsedAmount > 0) {
+      linkedTxId = generateUUID();
+      const txDate = data.transactionDate || data.due_date || getTodayKolkata();
+      const tx: Transaction = {
+        id: linkedTxId,
+        user_id: userId,
+        type: 'INCOME',
+        amount: parsedAmount,
+        transaction_date: txDate,
+        transaction_time: getCurrentTimeKolkata(),
+        from_account_id: null,
+        to_account_id: data.depositToAccountId,
+        category: data.transactionCategory || 'Debt Recovery / Khata',
+        description: `Borrowed from ${data.title.trim()}${data.description ? ` (${data.description.trim()})` : ''}`,
+        created_at: nowIso,
+        updated_at: nowIso,
+        sync_status: userId === DEMO_USER_ID ? 'pending' : 'synced',
+      };
+      await idbSaveTransaction(tx);
+
+      let txSynced = false;
+      if (userId !== DEMO_USER_ID) {
+        const supabase = getSupabase();
+        if (supabase && navigator.onLine) {
+          try {
+            const { sync_status, ...cloudTx } = tx;
+            const { error: txErr } = await supabase.from('transactions').insert(cloudTx);
+            if (!txErr) txSynced = true;
+          } catch (e) {
+            console.warn('Could not sync borrowed transaction:', e);
+          }
+        }
+      }
+
+      if (!txSynced) {
+        await idbAddToSyncQueue({
+          id: generateUUID(),
+          user_id: userId,
+          table: 'transactions',
+          action: 'UPSERT',
+          payload: tx as unknown as Record<string, unknown>,
+          created_at: nowIso,
+          retries: 0,
+        });
+        markOfflineChange();
+      }
+
+      const acc = accounts.find((a) => a.id === data.depositToAccountId);
+      await recordAuditLog({
+        id: generateUUID(),
+        user_id: userId,
+        action: 'CREATE',
+        entity_type: 'TRANSACTION',
+        entity_id: linkedTxId,
+        summary: `Borrowed ₹${parsedAmount.toFixed(2)} into ${acc?.display_name || 'Account'} from ${data.title.trim()}`,
+        details: { transaction: tx, noteId },
+        created_at: nowIso,
+      });
+    }
 
     const note: FinancialNote = {
       id: noteId,
@@ -2111,17 +2423,22 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       is_resolved: false,
       resolved_at: null,
       resolved_transaction_id: null,
+      linked_transaction_id: linkedTxId,
       created_at: nowIso,
       updated_at: nowIso,
     };
 
     await idbSaveNote(note);
 
+    let noteSynced = false;
     if (userId !== DEMO_USER_ID) {
-      await safeSyncNoteToSupabase(note, 'insert');
-    } else {
+      noteSynced = await safeSyncNoteToSupabase(note, 'insert');
+    }
+
+    if (!noteSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'financial_notes',
         action: 'UPSERT',
         payload: note as unknown as Record<string, unknown>,
@@ -2172,11 +2489,15 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbSaveNote(note);
 
+    let noteSynced = false;
     if (userId !== DEMO_USER_ID) {
-      await safeSyncNoteToSupabase(note, 'upsert');
-    } else {
+      noteSynced = await safeSyncNoteToSupabase(note, 'upsert');
+    }
+
+    if (!noteSynced) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'financial_notes',
         action: 'UPSERT',
         payload: note as unknown as Record<string, unknown>,
@@ -2222,21 +2543,26 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
     await idbDeleteNote(noteId, userId);
 
+    let cloudDeleted = false;
     if (userId !== DEMO_USER_ID) {
       const supabase = getSupabase();
       if (supabase && navigator.onLine) {
         try {
-          await supabase.from('financial_notes').delete().eq('id', noteId);
+          const { error } = await supabase.from('financial_notes').delete().eq('id', noteId);
+          if (!error) cloudDeleted = true;
         } catch (cloudErr) {
           console.warn('Could not delete note in Supabase:', cloudErr);
         }
       }
-    } else {
+    }
+
+    if (!cloudDeleted) {
       await idbAddToSyncQueue({
         id: generateUUID(),
+        user_id: userId,
         table: 'financial_notes',
         action: 'DELETE',
-        payload: { id: noteId },
+        payload: { id: noteId, user_id: userId },
         created_at: new Date().toISOString(),
         retries: 0,
       });
@@ -2267,6 +2593,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       transactionDate?: string;
       settleAmount?: number;
       paymentNotes?: string;
+      category?: string;
     }
   ): Promise<{ success: boolean; isFullySettled?: boolean; transactionId?: string; error?: string }> => {
     if (!userId) return { success: false, error: 'User is not logged in.' };
@@ -2304,7 +2631,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         const res = await addIncome({
           amount: effectiveSettleAmount,
           toAccountId: options.accountId,
-          category: 'Debt Repayment / Khata',
+          category: options?.category || 'Debt Recovery / Khata',
           date: txDate,
           description: `${isFullySettled ? 'Settled note' : 'Partial payment'}: ${target.title}${options?.paymentNotes ? ` (${options.paymentNotes})` : ''}`,
         });
@@ -2316,7 +2643,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         const res = await addExpense({
           amount: effectiveSettleAmount,
           fromAccountId: options.accountId,
-          category: 'Debt Repayment / Khata',
+          category: options?.category || 'Lending & Dues',
           date: txDate,
           description: `${isFullySettled ? 'Settled note' : 'Partial payment'}: ${target.title}${options?.paymentNotes ? ` (${options.paymentNotes})` : ''}`,
         });

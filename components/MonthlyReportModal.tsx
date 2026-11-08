@@ -211,6 +211,10 @@ export function MonthlyReportModal({
       expCatMap.set(c.label.toLowerCase(), { label: c.label, color: c.color });
       expCatMap.set(c.id.toLowerCase(), { label: c.label, color: c.color });
     });
+    // Support common aliases for friend dues and khata settlements
+    expCatMap.set('lending / dues', { label: 'Lending & Dues', color: '#0ea5e9' });
+    expCatMap.set('lending & dues', { label: 'Lending & Dues', color: '#0ea5e9' });
+    expCatMap.set('borrowing / dues', { label: 'Lending & Dues', color: '#0ea5e9' });
 
     const categorySums = new Map<
       string,

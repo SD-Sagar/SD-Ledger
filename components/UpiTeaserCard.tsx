@@ -23,7 +23,7 @@ export function UpiTeaserCard() {
                 UPI &amp; Bank Auto-Sync
               </h4>
               <span className="rounded-full bg-indigo-500/15 dark:bg-indigo-500/25 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-indigo-700 dark:text-indigo-300 ring-1 ring-inset ring-indigo-500/30">
-                Coming Soon &bull; v2.0
+                Coming Soon &bull; v3.0
               </span>
             </div>
             <p className="text-[11px] text-zinc-500 dark:text-zinc-400 truncate">

@@ -19,11 +19,14 @@ import {
   idbSaveNote,
   idbSaveNotes,
   idbDeleteNote,
+  idbHardDeleteNote,
   idbSetMeta,
   idbGetMeta,
   idbGetDeletedAccountIds,
   idbGetDeletedTransactionIds,
+  idbGetDeletedNoteIds,
   idbMarkTransactionDeleted,
+  idbMarkNoteDeleted,
 } from './indexedDB';
 import { Account, Transaction, Reconciliation, AuditLog, FinancialNote, SyncStatus, SyncQueueItem } from '../types';
 import {
@@ -179,6 +182,26 @@ export async function processSync(
       await supabase.from('transactions').update({ is_deleted: true, updated_at: tombstoneTimestamp }).eq('id', delTxId);
     }
 
+    // -------------------------------------------------------------------------
+    // RESOLVE DELETED FINANCIAL NOTES
+    // Prevents deleted notes from resurrecting from other devices or cloud!
+    // -------------------------------------------------------------------------
+    const deletedNoteIds = new Set<string>([
+      ...(await idbGetDeletedNoteIds(userId)),
+      ...(await idbGetDeletedNoteIds(DEMO_USER_ID)),
+    ]);
+    initialQueue
+      .filter((q) => q.table === 'financial_notes' && (q.action === 'DELETE' || (q.payload as { is_deleted?: boolean })?.is_deleted))
+      .forEach((q) => {
+        const targetId = (q.payload as { id: string })?.id;
+        if (targetId) deletedNoteIds.add(targetId);
+      });
+
+    // Ensure all deleted note IDs are purged from Supabase cloud
+    for (const delNoteId of deletedNoteIds) {
+      await supabase.from('financial_notes').delete().eq('id', delNoteId);
+    }
+
     const { data: remoteAccountsData, error: accError } = await supabase
       .from('accounts')
       .select('*')
@@ -258,8 +281,11 @@ export async function processSync(
         if (insertErr) throw insertErr;
 
         pushedCount++;
-        await idbSaveAccount({ ...(local as Account), user_id: userId });
-        await idbSaveAccount({ ...(local as Account), user_id: DEMO_USER_ID });
+        const pushedAcc = { ...(local as Account), user_id: userId };
+        await idbSaveAccount(pushedAcc);
+        await idbSaveAccount({ ...pushedAcc, user_id: DEMO_USER_ID });
+        remoteByName.set(normName, pushedAcc);
+        remoteById.set(local.id, pushedAcc);
         initialQueue
           .filter((q) => q.table === 'accounts' && q.payload?.id === local.id)
           .forEach((q) => handledAccountQueueIds.add(q.id));
@@ -278,6 +304,19 @@ export async function processSync(
         await idbSaveAccount(remote);
         await idbSaveAccount({ ...remote, user_id: DEMO_USER_ID });
         pulledCount++;
+        localByName.set(normName, remote);
+      }
+    }
+
+    // Purge any local ghost accounts in IndexedDB that no longer exist on the cloud
+    const activeRemoteAccountIds = new Set(remoteAccounts.map((a) => a.id));
+    for (const local of [...userAccs, ...demoAccs]) {
+      if (
+        !activeRemoteAccountIds.has(local.id) &&
+        !initialQueue.some((q) => q.table === 'accounts' && q.payload?.id === local.id)
+      ) {
+        await idbDeleteAccount(local.id, userId);
+        await idbDeleteAccount(local.id, DEMO_USER_ID);
       }
     }
 
@@ -490,6 +529,12 @@ export async function processSync(
 
       if (!notesError && Array.isArray(remoteNotes)) {
         for (const n of remoteNotes) {
+          if (deletedNoteIds.has(n.id) || n.is_deleted) {
+            await supabase.from('financial_notes').delete().eq('id', n.id);
+            await idbHardDeleteNote(n.id);
+            continue;
+          }
+
           const isResolved = Boolean(n.is_resolved);
           const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
           const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
@@ -497,8 +542,7 @@ export async function processSync(
           if (isExpired) {
             // Auto-clean resolved notes older than 5 days from Supabase and IndexedDB
             await supabase.from('financial_notes').delete().eq('id', n.id);
-            await idbDeleteNote(n.id, userId);
-            await idbDeleteNote(n.id, DEMO_USER_ID);
+            await idbHardDeleteNote(n.id);
           } else {
             await idbSaveNote(n as FinancialNote);
             await idbSaveNote({ ...(n as FinancialNote), user_id: DEMO_USER_ID });
@@ -506,33 +550,64 @@ export async function processSync(
         }
       }
 
-      // Push local notes to cloud if not yet on remote (auto-pruning expired resolved)
+      // Sync local notes with cloud
       const [userNotes, demoNotes] = await Promise.all([
         idbGetNotes(userId),
         idbGetNotes(DEMO_USER_ID),
       ]);
-      const remoteNoteIds = new Set((remoteNotes || []).map((n: FinancialNote) => n.id));
+      const activeRemoteNotes = (remoteNotes || []).filter(
+        (n: FinancialNote) => !deletedNoteIds.has(n.id) && !n.is_deleted
+      );
+      const remoteNoteIds = new Set(activeRemoteNotes.map((n: FinancialNote) => n.id));
       const localNoteMap = new Map<string, FinancialNote>();
       [...userNotes, ...demoNotes].forEach((n) => {
-        if (!localNoteMap.has(n.id)) localNoteMap.set(n.id, n);
+        if (!localNoteMap.has(n.id) && !deletedNoteIds.has(n.id) && !n.is_deleted) {
+          localNoteMap.set(n.id, n);
+        }
       });
 
+      // Find which local notes were explicitly created offline in sync_queue
+      const pendingNoteUpsertIds = new Set(
+        initialQueue
+          .filter((q) => q.table === 'financial_notes' && q.action === 'UPSERT')
+          .map((q) => (q.payload as { id: string })?.id)
+          .filter(Boolean)
+      );
+
       for (const n of Array.from(localNoteMap.values())) {
+        if (deletedNoteIds.has(n.id) || n.is_deleted) {
+          await idbHardDeleteNote(n.id);
+          continue;
+        }
+
         const isResolved = Boolean(n.is_resolved);
         const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
         const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
 
         if (isExpired) {
-          await idbDeleteNote(n.id, userId);
-          await idbDeleteNote(n.id, DEMO_USER_ID);
+          await idbHardDeleteNote(n.id);
           await supabase.from('financial_notes').delete().eq('id', n.id);
           continue;
         }
 
         if (!remoteNoteIds.has(n.id)) {
-          await supabase.from('financial_notes').upsert({ ...n, user_id: userId }, { onConflict: 'id' });
-          remoteNoteIds.add(n.id);
+          // If this note exists locally but is missing on remote:
+          // Check if it is a brand new note pending in the sync queue
+          if (pendingNoteUpsertIds.has(n.id)) {
+            await supabase.from('financial_notes').upsert({ ...n, user_id: userId }, { onConflict: 'id' });
+            remoteNoteIds.add(n.id);
+          } else {
+            // It was not created offline on this device; another device deleted it from the cloud!
+            // Clean it up locally so it does NOT resurrect!
+            await idbHardDeleteNote(n.id);
+          }
         }
+      }
+
+      // Remove handled financial note queue items
+      const noteQueueItems = initialQueue.filter((q) => q.table === 'financial_notes');
+      for (const q of noteQueueItems) {
+        await idbRemoveFromSyncQueue(q.id);
       }
     } catch (notesSyncErr) {
       console.warn('Could not sync financial notes during cloud sync:', notesSyncErr);

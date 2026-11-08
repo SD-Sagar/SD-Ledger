@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { FinancialNote } from '../lib/types';
 import { getTodayKolkata, formatINR, formatDisplayDate } from '../lib/utils/formatters';
+import { EXPENSE_CATEGORIES, INCOME_SOURCES } from '../lib/constants';
 import {
   X,
   CheckCircle2,
@@ -24,7 +25,7 @@ interface SettleNoteModalProps {
 }
 
 export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps) {
-  const { accounts, summary, resolveNote } = useLedger();
+  const { accounts, summary, transactions, resolveNote } = useLedger();
 
   const [settleMode, setSettleMode] = useState<'full' | 'partial'>('full');
   const [settleAmount, setSettleAmount] = useState<string>('');
@@ -33,6 +34,7 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
   const [selectedAccountId, setSelectedAccountId] = useState(
     accounts.length > 0 ? accounts[0].id : ''
   );
+  const [settleCategory, setSettleCategory] = useState<string>('Debt Recovery / Khata');
   const [settleDate, setSettleDate] = useState(getTodayKolkata());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +44,24 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
       setSettleMode('full');
       setSettleAmount(note.amount != null ? String(note.amount) : '');
       setPaymentNotes('');
+      setSettleCategory(note.type === 'THEY_OWE_ME' ? 'Debt Recovery / Khata' : 'Lending & Dues');
       setSettleDate(getTodayKolkata());
       setError(null);
-      if (accounts.length > 0 && !selectedAccountId) {
-        setSelectedAccountId(accounts[0].id);
+
+      // Smart default: Select the original account used when money was lent or borrowed
+      let initialAccountId = accounts.length > 0 ? accounts[0].id : '';
+      if (note.linked_transaction_id) {
+        const linkedTx = transactions.find((t) => t.id === note.linked_transaction_id);
+        if (linkedTx) {
+          const targetId = note.type === 'THEY_OWE_ME' ? linkedTx.from_account_id : linkedTx.to_account_id;
+          if (targetId && accounts.some((a) => a.id === targetId)) {
+            initialAccountId = targetId;
+          }
+        }
       }
+      setSelectedAccountId(initialAccountId);
     }
-  }, [isOpen, note, accounts, selectedAccountId]);
+  }, [isOpen, note, accounts, transactions]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -93,6 +106,7 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
         transactionDate: settleDate,
         settleAmount: hasAmount ? amountToSettle : undefined,
         paymentNotes: paymentNotes.trim() || undefined,
+        category: settleCategory,
       });
 
       if (!res.success) {
@@ -158,19 +172,18 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                 {note.title}
               </span>
               <span
-                className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                  note.type === 'THEY_OWE_ME'
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${note.type === 'THEY_OWE_ME'
                     ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
                     : note.type === 'I_OWE_THEM'
-                    ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
-                    : 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400'
-                }`}
+                      ? 'bg-rose-500/15 text-rose-700 dark:text-rose-400'
+                      : 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400'
+                  }`}
               >
                 {note.type === 'THEY_OWE_ME'
                   ? 'They Owe You'
                   : note.type === 'I_OWE_THEM'
-                  ? 'You Owe Them'
-                  : 'Reminder'}
+                    ? 'You Owe Them'
+                    : 'Reminder'}
               </span>
             </div>
 
@@ -261,11 +274,10 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                       setSettleMode('full');
                       setSettleAmount(String(currentDue));
                     }}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                      settleMode === 'full'
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${settleMode === 'full'
                         ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
                         : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                    }`}
+                      }`}
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Full Settlement ({formatINR(currentDue)})</span>
@@ -278,11 +290,10 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                         setSettleAmount(String(Math.round((currentDue / 2) * 100) / 100));
                       }
                     }}
-                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${
-                      settleMode === 'partial'
+                    className={`py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all ${settleMode === 'partial'
                         ? 'bg-white dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-sm'
                         : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                    }`}
+                      }`}
                   >
                     <Layers className="w-3.5 h-3.5" />
                     <span>Partial Repayment</span>
@@ -410,10 +421,15 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                 <div className="space-y-3">
                   {/* Account Dropdown */}
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                      {note.type === 'THEY_OWE_ME'
-                        ? 'Deposit Into Account *'
-                        : 'Deduct From Account *'}
+                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5 flex items-center justify-between">
+                      <span>
+                        {note.type === 'THEY_OWE_ME'
+                          ? 'Deposit Into Account *'
+                          : 'Deduct From Account *'}
+                      </span>
+                      <span className="text-[10px] text-zinc-400 font-normal">
+                        Defaulted to original account &bull; Can choose any
+                      </span>
                     </label>
                     <div className="relative">
                       <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500 pointer-events-none" />
@@ -439,6 +455,35 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                         })}
                       </select>
                       <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 dark:text-zinc-500 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Category Selection */}
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1 flex items-center justify-between">
+                      <span>{note.type === 'THEY_OWE_ME' ? 'Income Category' : 'Expense Category'}</span>
+                      <span className="text-[10px] text-zinc-400 font-normal">Reports tag</span>
+                    </label>
+                    <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 rounded-xl bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800">
+                      {(note.type === 'THEY_OWE_ME' ? INCOME_SOURCES : EXPENSE_CATEGORIES).map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSettleCategory(cat.id)}
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all flex items-center gap-1.5 cursor-pointer ${settleCategory === cat.id
+                              ? note.type === 'THEY_OWE_ME'
+                                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                : 'bg-rose-500/20 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500'
+                              : 'bg-white dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                            }`}
+                        >
+                          <span
+                            className="h-1.5 w-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span>{cat.label}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
@@ -485,8 +530,8 @@ export function SettleNoteModal({ isOpen, onClose, note }: SettleNoteModalProps)
                 {isSubmitting
                   ? 'Saving...'
                   : willBeFullySettled
-                  ? 'Confirm & Settle Full'
-                  : `Record Partial Payment (${formatINR(numericSettle)})`}
+                    ? 'Confirm & Settle Full'
+                    : `Record Partial Payment (${formatINR(numericSettle)})`}
               </span>
             </button>
           </div>

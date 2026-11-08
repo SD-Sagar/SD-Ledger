@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useLedger } from '../context/LedgerContext';
 import { FinancialNote, NoteType, NoteColor, SavedContact } from '../lib/types';
-import { formatDisplayDate } from '../lib/utils/formatters';
+import { getTodayKolkata, formatDisplayDate, formatINR } from '../lib/utils/formatters';
+import { EXPENSE_CATEGORIES, INCOME_SOURCES } from '../lib/constants';
 import { getSavedContacts, saveOrUpdateContact } from '../lib/utils/contacts';
 import {
   X,
@@ -16,6 +17,7 @@ import {
   Calendar,
   Phone,
   BookUser,
+  Building2,
 } from 'lucide-react';
 
 interface AddEditNoteModalProps {
@@ -42,7 +44,7 @@ export function AddEditNoteModal({
   defaultDueDate,
   prefilledContact,
 }: AddEditNoteModalProps) {
-  const { addNote, updateNote } = useLedger();
+  const { addNote, updateNote, accounts, summary } = useLedger();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -53,6 +55,12 @@ export function AddEditNoteModal({
   const [cardColor, setCardColor] = useState<NoteColor>('yellow');
   const [isPinned, setIsPinned] = useState(false);
 
+  // Direct Bank Account Ledger Link (Lend/Borrow from account now)
+  const [deductFromAccount, setDeductFromAccount] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [transactionCategory, setTransactionCategory] = useState('Lending & Dues');
+  const [deductionDate, setDeductionDate] = useState(getTodayKolkata());
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDateLocked, setIsDateLocked] = useState(false);
@@ -60,6 +68,12 @@ export function AddEditNoteModal({
   // Saved contacts and native contact picker support
   const [savedContacts, setSavedContacts] = useState<SavedContact[]>([]);
   const [hasContactPicker, setHasContactPicker] = useState(false);
+
+  useEffect(() => {
+    if (accounts.length > 0 && !selectedAccountId) {
+      setSelectedAccountId(accounts[0].id);
+    }
+  }, [accounts, selectedAccountId]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -76,6 +90,13 @@ export function AddEditNoteModal({
 
   useEffect(() => {
     if (isOpen) {
+      setDeductFromAccount(false);
+      setTransactionCategory('Lending & Dues');
+      setDeductionDate(getTodayKolkata());
+      if (accounts.length > 0) {
+        setSelectedAccountId(accounts[0].id);
+      }
+
       if (noteToEdit) {
         setTitle(noteToEdit.title);
         setDescription(noteToEdit.description || '');
@@ -100,7 +121,7 @@ export function AddEditNoteModal({
       }
       setError(null);
     }
-  }, [isOpen, noteToEdit, defaultDueDate, prefilledContact]);
+  }, [isOpen, noteToEdit, defaultDueDate, prefilledContact, accounts]);
 
   // Close on Escape key press
   useEffect(() => {
@@ -196,6 +217,10 @@ export function AddEditNoteModal({
           due_date: dueDate || undefined,
           card_color: cardColor,
           is_pinned: isPinned,
+          deductFromAccountId: !noteToEdit && deductFromAccount && type === 'THEY_OWE_ME' ? selectedAccountId : undefined,
+          depositToAccountId: !noteToEdit && deductFromAccount && type === 'I_OWE_THEM' ? selectedAccountId : undefined,
+          transactionCategory: !noteToEdit && deductFromAccount ? transactionCategory : undefined,
+          transactionDate: !noteToEdit && deductFromAccount ? (deductionDate || getTodayKolkata()) : undefined,
         });
         if (!res.success) {
           setError(res.error || 'Failed to create note.');
@@ -259,274 +284,378 @@ export function AddEditNoteModal({
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           {/* Scrollable Form Content */}
           <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5 space-y-4">
-          {error && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span>{error}</span>
-            </div>
-          )}
+            {error && (
+              <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
-          {/* Locked Calendar Date Pill if opened from calendar */}
-          {isDateLocked && dueDate && (
-            <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 text-xs">
-              <span className="flex items-center gap-2 font-medium text-emerald-800 dark:text-emerald-300">
-                <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>
-                  Adding for selected date: <strong>{formatDisplayDate(dueDate)}</strong>
+            {/* Locked Calendar Date Pill if opened from calendar */}
+            {isDateLocked && dueDate && (
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 text-xs">
+                <span className="flex items-center gap-2 font-medium text-emerald-800 dark:text-emerald-300">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                  <span>
+                    Adding for selected date: <strong>{formatDisplayDate(dueDate)}</strong>
+                  </span>
                 </span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsDateLocked(false)}
-                className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
-                title="Click to unlock and select a different date"
-              >
-                <Lock className="w-2.5 h-2.5" />
-                <span>Locked &bull; Change</span>
-              </button>
-            </div>
-          )}
+                <button
+                  type="button"
+                  onClick={() => setIsDateLocked(false)}
+                  className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 hover:underline cursor-pointer"
+                  title="Click to unlock and select a different date"
+                >
+                  <Lock className="w-2.5 h-2.5" />
+                  <span>Locked &bull; Change</span>
+                </button>
+              </div>
+            )}
 
-          {/* Type Selector Tabs */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-              Entry Type
-            </label>
-            <div className="grid grid-cols-3 gap-2 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <button
-                type="button"
-                onClick={() => setType('THEY_OWE_ME')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
-                  type === 'THEY_OWE_ME'
-                    ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
-              >
-                <ArrowDownLeft className="w-3.5 h-3.5" />
-                <span>They Owe Me</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setType('I_OWE_THEM')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
-                  type === 'I_OWE_THEM'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
-              >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                <span>I Owe Them</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setType('REMINDER')}
-                className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${
-                  type === 'REMINDER'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
-                }`}
-              >
-                <StickyNote className="w-3.5 h-3.5" />
-                <span>Reminder</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Title / Friend Name */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-              {type === 'REMINDER' ? 'Note Title / Purpose *' : 'Friend Name / Reason *'}
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder={
-                type === 'THEY_OWE_ME'
-                  ? 'e.g. Rahul (Dinner share)'
-                  : type === 'I_OWE_THEM'
-                  ? 'e.g. Priya (Electricity bill split)'
-                  : 'e.g. Pay annual car insurance next week'
-              }
-              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-              required
-            />
-          </div>
-
-          {/* Amount & Due Date in 2 columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Type Selector Tabs */}
             <div>
               <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-                Amount (₹) {type === 'REMINDER' ? '(Optional)' : '*'}
+                Entry Type
               </label>
-              <div className="relative">
-                <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm">
-                  ₹
-                </span>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00"
-                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 pl-8 pr-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-                  required={type !== 'REMINDER'}
-                />
+              <div className="grid grid-cols-3 gap-2 p-1 bg-zinc-100 dark:bg-zinc-900 rounded-xl border border-zinc-200 dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType('THEY_OWE_ME');
+                    setTransactionCategory('Lending & Dues');
+                  }}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${type === 'THEY_OWE_ME'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                >
+                  <ArrowDownLeft className="w-3.5 h-3.5" />
+                  <span>They Owe Me</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType('I_OWE_THEM');
+                    setTransactionCategory('Debt Recovery / Khata');
+                  }}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${type === 'I_OWE_THEM'
+                      ? 'bg-rose-600 text-white shadow-sm'
+                      : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  <span>I Owe Them</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setType('REMINDER')}
+                  className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-semibold transition-all ${type === 'REMINDER'
+                      ? 'bg-indigo-600 text-white shadow-sm'
+                      : 'text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white'
+                    }`}
+                >
+                  <StickyNote className="w-3.5 h-3.5" />
+                  <span>Reminder</span>
+                </button>
               </div>
             </div>
 
+            {/* Title / Friend Name */}
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                {type === 'REMINDER' ? 'Note Title / Purpose *' : 'Friend Name / Reason *'}
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={
+                  type === 'THEY_OWE_ME'
+                    ? 'e.g. Rahul (Dinner share)'
+                    : type === 'I_OWE_THEM'
+                      ? 'e.g. Priya (Electricity bill split)'
+                      : 'e.g. Pay annual car insurance next week'
+                }
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                required
+              />
+            </div>
+
+            {/* Amount & Due Date in 2 columns */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                  Amount (₹) {type === 'REMINDER' ? '(Optional)' : '*'}
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 font-mono text-sm">
+                    ₹
+                  </span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 pl-8 pr-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                    required={type !== 'REMINDER'}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                    Target / Due Date (Optional)
+                  </label>
+                  {isDateLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDateLocked(false)}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                    >
+                      <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+                      <span>Locked (Click to change)</span>
+                    </button>
+                  )}
+                </div>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={dueDate}
+                    onChange={(e) => setDueDate(e.target.value)}
+                    disabled={isDateLocked}
+                    className={`w-full rounded-xl border py-2.5 px-3.5 text-sm transition-colors ${isDateLocked
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100 font-semibold cursor-not-allowed opacity-90'
+                        : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500'
+                      }`}
+                    style={{ colorScheme: 'light dark' }}
+                  />
+                </div>
+                {isDateLocked && dueDate && (
+                  <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+                    <Lock className="w-3 h-3 shrink-0" />
+                    <span>Captured from calendar selection ({formatDisplayDate(dueDate)})</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Friend WhatsApp Number: Input is half-size on PC/desktop, with Pick Existing & Import in the empty space */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300">
-                  Target / Due Date (Optional)
+                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
+                  <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span>Friend&apos;s WhatsApp Number (Optional)</span>
                 </label>
-                {isDateLocked && (
-                  <button
-                    type="button"
-                    onClick={() => setIsDateLocked(false)}
-                    className="flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
-                  >
-                    <Lock className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-                    <span>Locked (Click to change)</span>
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  disabled={isDateLocked}
-                  className={`w-full rounded-xl border py-2.5 px-3.5 text-sm transition-colors ${
-                    isDateLocked
-                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-950 dark:text-emerald-100 font-semibold cursor-not-allowed opacity-90'
-                      : 'bg-zinc-50 dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500'
-                  }`}
-                  style={{ colorScheme: 'light dark' }}
-                />
-              </div>
-              {isDateLocked && dueDate && (
-                <p className="mt-1 flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                  <Lock className="w-3 h-3 shrink-0" />
-                  <span>Captured from calendar selection ({formatDisplayDate(dueDate)})</span>
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Friend WhatsApp Number: Input is half-size on PC/desktop, with Pick Existing & Import in the empty space */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 flex items-center gap-1.5">
-                <Phone className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Friend&apos;s WhatsApp Number (Optional)</span>
-              </label>
-              <span className="text-[10px] text-zinc-400">For 1-tap WhatsApp reminders</span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {/* Left Column (Half size on PC): Phone Number Input */}
-              <div className="relative">
-                <input
-                  type="tel"
-                  value={phoneNumber}
-                  onChange={(e) => setPhoneNumber(e.target.value)}
-                  placeholder="e.g. 7319332362"
-                  className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
-                />
+                <span className="text-[10px] text-zinc-400">For 1-tap WhatsApp reminders</span>
               </div>
 
-              {/* Right Column (Half size on PC): Pick Existing Contact & Mobile Import */}
-              <div className="flex items-center gap-1.5">
-                {/* Pick Existing Contact Dropdown */}
-                <div className="relative flex-1">
-                  <select
-                    value=""
-                    onChange={(e) => handleSelectSavedContact(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3 py-2.5 text-xs text-zinc-700 dark:text-zinc-300 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer truncate"
-                  >
-                    <option value="">
-                      {savedContacts.length > 0 ? '👤 Pick Saved Friend...' : 'No Saved Contacts'}
-                    </option>
-                    {savedContacts.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name} ({c.phone})
-                      </option>
-                    ))}
-                  </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* Left Column (Half size on PC): Phone Number Input */}
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={phoneNumber}
+                    onChange={(e) => setPhoneNumber(e.target.value)}
+                    placeholder="e.g. 7319332362"
+                    className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2.5 text-sm font-mono text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors"
+                  />
                 </div>
 
-                {/* Import from Native Contacts (Mobile / Smaller screens) */}
-                {hasContactPicker && (
-                  <button
-                    type="button"
-                    onClick={handlePickFromNativeContacts}
-                    className="flex items-center gap-1 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold shadow-xs shrink-0 transition-colors cursor-pointer"
-                    title="Pick contact from your phone"
-                  >
-                    <BookUser className="w-3.5 h-3.5" />
-                    <span className="sm:hidden">Import</span>
-                    <span className="hidden sm:inline">Phone</span>
-                  </button>
-                )}
+                {/* Right Column (Half size on PC): Pick Existing Contact & Mobile Import */}
+                <div className="flex items-center gap-1.5">
+                  {/* Pick Existing Contact Dropdown */}
+                  <div className="relative flex-1">
+                    <select
+                      value=""
+                      onChange={(e) => handleSelectSavedContact(e.target.value)}
+                      className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3 py-2.5 text-xs text-zinc-700 dark:text-zinc-300 focus:border-emerald-500 focus:outline-none transition-colors cursor-pointer truncate"
+                    >
+                      <option value="">
+                        {savedContacts.length > 0 ? '👤 Pick Saved Friend...' : 'No Saved Contacts'}
+                      </option>
+                      {savedContacts.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} ({c.phone})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Import from Native Contacts (Mobile / Smaller screens) */}
+                  {hasContactPicker && (
+                    <button
+                      type="button"
+                      onClick={handlePickFromNativeContacts}
+                      className="flex items-center gap-1 px-3 py-2.5 rounded-xl border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 text-xs font-semibold shadow-xs shrink-0 transition-colors cursor-pointer"
+                      title="Pick contact from your phone"
+                    >
+                      <BookUser className="w-3.5 h-3.5" />
+                      <span className="sm:hidden">Import</span>
+                      <span className="hidden sm:inline">Phone</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Description / Extra Details */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-              Description / Notes (Optional)
-            </label>
-            <textarea
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add details, reason (e.g. Dinner share), or reference notes..."
-              className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors resize-none"
-            />
-          </div>
+            {/* Optional Direct Bank Account Ledger Link (Lend/Borrow from account now) */}
+            {!noteToEdit && (type === 'THEY_OWE_ME' || type === 'I_OWE_THEM') && accounts.length > 0 && (
+              <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-3.5 space-y-2.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={deductFromAccount}
+                    onChange={(e) => setDeductFromAccount(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-zinc-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div className="flex-1">
+                    <div className="text-xs font-semibold text-zinc-900 dark:text-white flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>
+                        {type === 'THEY_OWE_ME'
+                          ? 'Deduct from bank account now? (I am lending money right now)'
+                          : 'Add to bank account now? (I received borrowed money into an account)'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-0.5 leading-relaxed">
+                      {type === 'THEY_OWE_ME'
+                        ? 'Logs an immediate Expense in your ledger so your bank balance decreases right now.'
+                        : 'Logs an immediate Income into your ledger so your bank balance increases right now.'}
+                      {' '}Leave unchecked for a pure note / reminder without touching bank balance.
+                    </p>
+                  </div>
+                </label>
 
-          {/* Color Picker */}
-          <div>
-            <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
-              Card Color
-            </label>
-            <div className="flex items-center gap-2 flex-wrap">
-              {COLOR_OPTIONS.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setCardColor(c.id)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
-                    c.bg
-                  } border ${c.border} ${
-                    cardColor === c.id
-                      ? 'ring-2 ring-emerald-500 shadow-sm scale-105'
-                      : 'opacity-70 hover:opacity-100'
-                  }`}
-                >
-                  <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
-                  <span className="text-zinc-900 dark:text-white">{c.label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
+                {deductFromAccount && (
+                  <div className="pl-6 pt-1 space-y-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1">
+                        {type === 'THEY_OWE_ME' ? 'Deduct From Bank Account *' : 'Deposit Into Bank Account *'}
+                      </label>
+                      <select
+                        value={selectedAccountId}
+                        onChange={(e) => setSelectedAccountId(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-xs text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        required={deductFromAccount}
+                      >
+                        {accounts.map((acc) => {
+                          const accSummary = summary.accounts.find((a) => a.account.id === acc.id);
+                          const bal = accSummary ? accSummary.calculatedBalance : acc.opening_balance;
+                          return (
+                            <option key={acc.id} value={acc.id}>
+                              {acc.display_name} (Current Balance: {formatINR(bal)})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
 
-          {/* Pin toggle */}
-          <div className="flex items-center justify-between pt-2">
-            <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isPinned}
-                onChange={(e) => setIsPinned(e.target.checked)}
-                className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                    {/* Deduction / Deposit Date (When bank balance actually changed) */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1 flex items-center justify-between">
+                        <span>{type === 'THEY_OWE_ME' ? 'Deduction Date (When lent)' : 'Deposit Date (When received)'}</span>
+                        <span className="text-[10px] text-zinc-400 font-normal">Default: Today</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={deductionDate}
+                        onChange={(e) => setDeductionDate(e.target.value)}
+                        className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-xs text-zinc-900 dark:text-white focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                    </div>
+
+                    {/* Preconfigured Category Selection */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-zinc-600 dark:text-zinc-400 mb-1 flex items-center justify-between">
+                        <span>{type === 'THEY_OWE_ME' ? 'Expense Category' : 'Income Category'}</span>
+                        <span className="text-[10px] text-zinc-400 font-normal">Reports tag</span>
+                      </label>
+                      <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 rounded-lg bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800">
+                        {(type === 'THEY_OWE_ME' ? EXPENSE_CATEGORIES : INCOME_SOURCES).map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => {
+                              setTransactionCategory(cat.id);
+                              if (!title.trim()) {
+                                setTitle(cat.label);
+                              }
+                            }}
+                            className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-all flex items-center gap-1.5 cursor-pointer ${transactionCategory === cat.id
+                                ? type === 'THEY_OWE_ME'
+                                  ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300 ring-1 ring-rose-500'
+                                  : 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-500'
+                                : 'bg-zinc-100 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white hover:bg-zinc-200 dark:hover:bg-zinc-800'
+                              }`}
+                          >
+                            <span
+                              className="h-1.5 w-1.5 rounded-full shrink-0"
+                              style={{ backgroundColor: cat.color }}
+                            />
+                            <span>{cat.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Description / Extra Details */}
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                Description / Notes (Optional)
+              </label>
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Add details, reason (e.g. Dinner share), or reference notes..."
+                className="w-full rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-3.5 py-2 text-sm text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-colors resize-none"
               />
-              <Pin className="w-3.5 h-3.5 text-amber-500" />
-              <span>Pin to top of list</span>
-            </label>
-          </div>
+            </div>
+
+            {/* Color Picker */}
+            <div>
+              <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1.5">
+                Card Color
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {COLOR_OPTIONS.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCardColor(c.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${c.bg
+                      } border ${c.border} ${cardColor === c.id
+                        ? 'ring-2 ring-emerald-500 shadow-sm scale-105'
+                        : 'opacity-70 hover:opacity-100'
+                      }`}
+                  >
+                    <span className={`w-2.5 h-2.5 rounded-full ${c.dot}`} />
+                    <span className="text-zinc-900 dark:text-white">{c.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Pin toggle */}
+            <div className="flex items-center justify-between pt-2">
+              <label className="flex items-center gap-2 text-xs font-semibold text-zinc-700 dark:text-zinc-300 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={isPinned}
+                  onChange={(e) => setIsPinned(e.target.checked)}
+                  className="w-4 h-4 rounded border-zinc-300 dark:border-zinc-700 text-emerald-600 focus:ring-emerald-500"
+                />
+                <Pin className="w-3.5 h-3.5 text-amber-500" />
+                <span>Pin to top of list</span>
+              </label>
+            </div>
 
           </div>
 
