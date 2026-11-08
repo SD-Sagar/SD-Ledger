@@ -21,8 +21,10 @@ import {
   Calculator,
   Settings,
   ShieldAlert,
+  Sparkles,
 } from 'lucide-react';
 import { DEMO_USER_ID, ADMIN_EMAIL } from '../lib/constants';
+import { idbClearSyncQueue } from '../lib/db/indexedDB';
 import { BrandLogo } from './BrandLogo';
 import { NotificationCenter } from './NotificationCenter';
 import { UserSettingsModal } from './UserSettingsModal';
@@ -43,7 +45,7 @@ export function Navbar({
   onOpenAuditTrail,
   onOpenSupabaseGuide,
 }: NavbarProps) {
-  const { user, isDemoUser, signOut } = useAuth();
+  const { user, isDemoUser, signOut, continueAsDemo, switchToOnline } = useAuth();
   const {
     syncStatus,
     uploadOfflineToCloud,
@@ -51,6 +53,7 @@ export function Navbar({
     pushLocalDataToCloud,
     linkedCloudAccount,
     clearLocalData,
+    refreshData,
   } = useLedger();
   const { theme, toggleTheme } = useTheme();
 
@@ -133,16 +136,25 @@ export function Navbar({
       alert('Device is currently offline. Connect to the internet to pull latest cloud data.');
       return;
     }
+    if (syncStatus.pendingCount > 0) {
+      const confirmPull = window.confirm(
+        'Warning: You have unpushed offline changes. Pulling latest data from cloud will discard unpushed changes. Do you want to proceed?'
+      );
+      if (!confirmPull) return;
+    }
     setIsPulling(true);
-    await pullLatestFromCloud();
+    const res = await pullLatestFromCloud();
     setIsPulling(false);
     setShowMoreMenu(false);
+    if (res && res.requiresAuth) {
+      onOpenAuth(res.error || 'Please sign in to authenticate and pull latest cloud records.');
+    }
   };
 
   const handleConfirmSwitch = async () => {
-    if (clearDataOnSwitch) {
-      await clearLocalData(DEMO_USER_ID);
-    }
+    // Always clear old offline data & sync queue when switching accounts
+    await clearLocalData(DEMO_USER_ID);
+    await idbClearSyncQueue();
     setShowSwitchModal(false);
     onOpenAuth('Sign in with the new cloud account you wish to link and import into offline mode:');
   };
@@ -567,29 +579,68 @@ export function Navbar({
                       )}
 
                       {isDemoUser ? (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowUserDropdown(false);
-                            setShowSwitchModal(true);
-                          }}
-                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
-                        >
-                          <ArrowLeftRight className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <span>Switch Cloud Account</span>
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setShowUserDropdown(false);
+                              await switchToOnline();
+                            }}
+                            className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors text-left cursor-pointer"
+                          >
+                            <Database className="h-4 w-4 text-emerald-500 shrink-0" />
+                            <div>
+                              <span>Switch to Online Mode</span>
+                              <span className="block text-[10px] text-zinc-400 font-normal">
+                                Real-time Supabase cloud sync
+                              </span>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowUserDropdown(false);
+                              setShowSwitchModal(true);
+                            }}
+                            className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
+                          >
+                            <ArrowLeftRight className="h-4 w-4 text-zinc-400 shrink-0" />
+                            <span>Switch Cloud Account</span>
+                          </button>
+                        </>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowUserDropdown(false);
-                            onOpenAuth();
-                          }}
-                          className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
-                        >
-                          <User className="h-4 w-4 text-zinc-400 shrink-0" />
-                          <span>Account Credentials</span>
-                        </button>
+                        <>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              setShowUserDropdown(false);
+                              if (user) {
+                                continueAsDemo(user.email, user.id);
+                                await refreshData(DEMO_USER_ID);
+                              }
+                            }}
+                            className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors text-left cursor-pointer"
+                          >
+                            <Sparkles className="h-4 w-4 text-amber-500 shrink-0" />
+                            <div>
+                              <span>Switch to Offline Mode</span>
+                              <span className="block text-[10px] text-zinc-400 font-normal">
+                                Local isolated workspace
+                              </span>
+                            </div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowUserDropdown(false);
+                              onOpenAuth();
+                            }}
+                            className="w-full flex items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-900 transition-colors text-left cursor-pointer"
+                          >
+                            <User className="h-4 w-4 text-zinc-400 shrink-0" />
+                            <span>Account Credentials</span>
+                          </button>
+                        </>
                       )}
 
                       <div className="pt-1 mt-1 border-t border-zinc-100 dark:border-zinc-800">

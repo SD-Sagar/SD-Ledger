@@ -21,6 +21,14 @@ function MainAppContent() {
   const { isLoading: authLoading, user, continueAsDemo } = useAuth();
   const { isInitialized, needsSetupWizard, notes } = useLedger();
 
+  const registeredEmail = typeof window !== 'undefined'
+    ? (localStorage.getItem('sd_ledger_registered_user_email') || localStorage.getItem('sd_ledger_linked_cloud_email'))
+    : null;
+  const registeredUid = typeof window !== 'undefined'
+    ? (localStorage.getItem('sd_ledger_registered_user_id') || localStorage.getItem('sd_ledger_linked_cloud_uid'))
+    : null;
+  const hasRegisteredAccount = Boolean(registeredUid || registeredEmail);
+
   // Active dashboard tab state (shared across desktop and mobile bottom dock)
   const [activeTab, setActiveTab] = useState<'overview' | 'accounts' | 'transactions' | 'notes' | 'reconcile'>('overview');
 
@@ -104,13 +112,16 @@ function MainAppContent() {
                     <ArrowRight className="h-4 w-4" />
                   </button>
 
-                  <button
-                    onClick={() => continueAsDemo()}
-                    className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 py-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
-                  >
-                    <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-                    <span>Continue in Local Offline Mode</span>
-                  </button>
+                  {/* Rule 1: User needs to add or register an online account first before using offline */}
+                  {hasRegisteredAccount && (
+                    <button
+                      onClick={() => continueAsDemo(registeredEmail || undefined, registeredUid || undefined)}
+                      className="w-full flex items-center justify-center gap-2 rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 py-2.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-800 hover:text-zinc-950 dark:hover:text-white transition-colors"
+                    >
+                      <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+                      <span>Continue in Offline Mode {registeredEmail ? `(${registeredEmail})` : ''}</span>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => setShowCalculatorModal(true)}

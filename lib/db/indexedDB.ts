@@ -493,6 +493,17 @@ export async function idbRemoveFromSyncQueue(id: string): Promise<void> {
   });
 }
 
+export async function idbClearSyncQueue(): Promise<void> {
+  const db = await getDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('sync_queue', 'readwrite');
+    const store = tx.objectStore('sync_queue');
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+}
+
 // ---------------------- META ----------------------
 export async function idbGetMeta<T = unknown>(key: string): Promise<T | null> {
   const db = await getDB();

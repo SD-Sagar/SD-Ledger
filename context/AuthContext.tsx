@@ -22,7 +22,8 @@ interface AuthContextType {
   resetPassword: (email: string) => Promise<{ success: boolean; error?: string }>;
   updatePassword: (password: string) => Promise<{ success: boolean; error?: string }>;
   resendVerificationEmail: (email: string) => Promise<{ success: boolean; error?: string }>;
-  continueAsDemo: () => void;
+  continueAsDemo: (linkedEmail?: string, linkedUid?: string) => void;
+  switchToOnline: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -43,19 +44,70 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuthError(null);
   }, []);
 
-  const continueAsDemo = useCallback(() => {
+  const continueAsDemo = useCallback((linkedEmail?: string, linkedUid?: string) => {
     setIsDemoUser(true);
+    const effEmail = linkedEmail || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_email') || localStorage.getItem('sd_ledger_registered_user_email') : null) || DEMO_USER_EMAIL;
+    const effUid = linkedUid || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') || localStorage.getItem('sd_ledger_registered_user_id') : null);
     setUser({
       id: DEMO_USER_ID,
-      email: DEMO_USER_EMAIL,
-      fullName: 'SD-Ledger Demo User',
+      email: effEmail,
+      fullName: 'Offline Ledger',
       isEmailVerified: true,
     });
-    setRawUser(null);
-    setSession(null);
+    // NOTE: Keep rawUser/session intact if present so background queries pass Supabase RLS!
     if (typeof window !== 'undefined') {
       localStorage.setItem('sd_ledger_is_demo', 'true');
+      localStorage.removeItem('sd_ledger_explicit_signout');
+      if (effEmail && effEmail !== DEMO_USER_EMAIL) {
+        localStorage.setItem('sd_ledger_linked_cloud_email', effEmail);
+      }
+      if (effUid) {
+        localStorage.setItem('sd_ledger_linked_cloud_uid', effUid);
+      }
     }
+  }, []);
+
+  const switchToOnline = useCallback(async () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('sd_ledger_is_demo');
+    }
+    const supabase = getSupabase();
+    if (supabase) {
+      try {
+        const { data: { session: currSession } } = await supabase.auth.getSession();
+        if (currSession?.user) {
+          setSession(currSession);
+          setRawUser(currSession.user);
+          setUser({
+            id: currSession.user.id,
+            email: currSession.user.email || '',
+            fullName: currSession.user.user_metadata?.full_name || currSession.user.email?.split('@')[0],
+            isEmailVerified: Boolean(currSession.user.email_confirmed_at),
+          });
+          setIsDemoUser(false);
+          return;
+        }
+      } catch {
+        // network / offline
+      }
+    }
+    if (typeof window !== 'undefined') {
+      const cached = localStorage.getItem('sd_ledger_last_auth_user');
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached) as UserProfile;
+          if (parsed && parsed.id) {
+            setUser(parsed);
+            setIsDemoUser(false);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+    setIsDemoUser(false);
+    setUser(null);
   }, []);
 
   // Check if a user is blocked by the administrator
@@ -86,14 +138,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function initAuth() {
       // Check if user was explicitly in offline mode
       if (typeof window !== 'undefined' && localStorage.getItem('sd_ledger_is_demo') === 'true') {
-        continueAsDemo();
+        const linkedEmail = localStorage.getItem('sd_ledger_linked_cloud_email') || localStorage.getItem('sd_ledger_registered_user_email');
+        const linkedUid = localStorage.getItem('sd_ledger_linked_cloud_uid') || localStorage.getItem('sd_ledger_registered_user_id');
+        continueAsDemo(linkedEmail || undefined, linkedUid || undefined);
+
+        // Also restore active session if available in Supabase client so Live Sync and cloud queries work!
+        const supabase = getSupabase();
+        if (supabase) {
+          try {
+            const { data: { session: existingSession } } = await supabase.auth.getSession();
+            if (mounted && existingSession?.user) {
+              setSession(existingSession);
+              setRawUser(existingSession.user);
+            }
+          } catch {
+            // offline / non-blocking
+          }
+        }
         setIsLoading(false);
         return;
       }
 
       const supabase = getSupabase();
       if (!supabase) {
-        // Without Supabase configured, show welcome page so user can choose to continue in offline mode
+        // Without Supabase configured, check if we have cached user profile
+        const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_last_auth_user') : null;
+        if (cachedUserStr) {
+          try {
+            const cachedUser = JSON.parse(cachedUserStr) as UserProfile;
+            if (cachedUser && cachedUser.id) {
+              setUser(cachedUser);
+              setIsDemoUser(false);
+              setIsLoading(false);
+              return;
+            }
+          } catch {
+            // ignore
+          }
+        }
         setUser(null);
         setIsLoading(false);
         return;
@@ -118,16 +200,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             } else {
               setSession(initialSession);
               setRawUser(initialSession.user);
-              setUser({
+              const authProfile: UserProfile = {
                 id: initialSession.user.id,
                 email: initialSession.user.email || '',
                 fullName: initialSession.user.user_metadata?.full_name || initialSession.user.email?.split('@')[0],
                 isEmailVerified: Boolean(initialSession.user.email_confirmed_at),
-              });
+              };
+              setUser(authProfile);
               setIsDemoUser(false);
+
+              // Cache credentials for offline resilience & linked account reference
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('sd_ledger_explicit_signout');
+                localStorage.setItem('sd_ledger_registered_user_id', initialSession.user.id);
+                localStorage.setItem('sd_ledger_registered_user_email', initialSession.user.email || '');
+                localStorage.setItem('sd_ledger_linked_cloud_uid', initialSession.user.id);
+                localStorage.setItem('sd_ledger_linked_cloud_email', initialSession.user.email || '');
+                localStorage.setItem('sd_ledger_last_auth_user', JSON.stringify(authProfile));
+              }
             }
           } else {
-            // No active session: keep user null so user sees the Welcome landing page (Picture 2) first
+            // OFFLINE AUTH RESILIENCE: If device is offline (!navigator.onLine) and user was not explicitly signed out,
+            // restore last authenticated profile from local cache so they aren't kicked to the Welcome landing screen!
+            const cachedUserStr = typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_last_auth_user') : null;
+            const wasExplicitlySignedOut = typeof window !== 'undefined' && localStorage.getItem('sd_ledger_explicit_signout') === 'true';
+            if (!navigator.onLine && cachedUserStr && !wasExplicitlySignedOut) {
+              try {
+                const cachedUser = JSON.parse(cachedUserStr) as UserProfile;
+                if (cachedUser && cachedUser.id) {
+                  setUser(cachedUser);
+                  setIsDemoUser(false);
+                  setIsLoading(false);
+                  return;
+                }
+              } catch {
+                // ignore
+              }
+            }
+
+            // No active session & not offline-restorable: keep user null so user sees the Welcome landing page
             setSession(null);
             setRawUser(null);
             setUser(null);
@@ -234,6 +345,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return { success: true, needsVerification: true };
       }
 
+      if (data.user && typeof window !== 'undefined') {
+        localStorage.removeItem('sd_ledger_is_demo');
+        localStorage.removeItem('sd_ledger_explicit_signout');
+        localStorage.setItem('sd_ledger_registered_user_id', data.user.id);
+        localStorage.setItem('sd_ledger_registered_user_email', data.user.email || '');
+        localStorage.setItem('sd_ledger_linked_cloud_uid', data.user.id);
+        localStorage.setItem('sd_ledger_linked_cloud_email', data.user.email || '');
+        localStorage.setItem('sd_ledger_last_auth_user', JSON.stringify({
+          id: data.user.id,
+          email: data.user.email || '',
+          fullName: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
+          isEmailVerified: Boolean(data.user.email_confirmed_at),
+        }));
+      }
+
       setAuthMessage('Account created successfully! Welcome to SD-Ledger.');
       return { success: true, needsVerification: false };
     } catch (err: unknown) {
@@ -273,6 +399,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (typeof window !== 'undefined') {
         localStorage.removeItem('sd_ledger_is_demo');
+        localStorage.removeItem('sd_ledger_explicit_signout');
+        localStorage.setItem('sd_ledger_registered_user_id', data.user.id);
+        localStorage.setItem('sd_ledger_registered_user_email', data.user.email || '');
+        localStorage.setItem('sd_ledger_linked_cloud_uid', data.user.id);
+        localStorage.setItem('sd_ledger_linked_cloud_email', data.user.email || '');
+        localStorage.setItem('sd_ledger_last_auth_user', JSON.stringify({
+          id: data.user.id,
+          email: data.user.email || '',
+          fullName: data.user.user_metadata?.full_name || data.user.email?.split('@')[0],
+          isEmailVerified: Boolean(data.user.email_confirmed_at),
+        }));
       }
 
       setIsDemoUser(false);
@@ -308,6 +445,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (typeof window !== 'undefined') {
       localStorage.removeItem('sd_ledger_is_demo');
+      localStorage.setItem('sd_ledger_explicit_signout', 'true');
       if (user && user.id !== DEMO_USER_ID) {
         localStorage.setItem('sd_ledger_offline_synced_cloud_account', user.email || user.id);
         localStorage.setItem('sd_ledger_offline_changes_made', 'false');
@@ -417,6 +555,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         updatePassword,
         resendVerificationEmail,
         continueAsDemo,
+        switchToOnline,
       }}
     >
       {children}

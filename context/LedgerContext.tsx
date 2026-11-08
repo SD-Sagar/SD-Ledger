@@ -35,6 +35,7 @@ import {
   idbDeleteNote,
   idbAddToSyncQueue,
   idbGetSyncQueue,
+  idbClearSyncQueue,
   idbGetMeta,
   idbExportDatabase,
   idbRestoreDatabase,
@@ -95,8 +96,9 @@ interface LedgerContextType {
   setLinkedCloudAccount: (email: string, uid: string) => void;
   clearLinkedCloudAccount: () => void;
   uploadOfflineToCloud: () => Promise<SyncResult>;
-  pullLatestFromCloud: () => Promise<{ success: boolean; count: number; error?: string }>;
+  pullLatestFromCloud: () => Promise<{ success: boolean; count: number; requiresAuth?: boolean; error?: string }>;
   pushLocalDataToCloud: () => Promise<{ success: boolean; count: number; error?: string }>;
+  refreshData: (uid?: string) => Promise<void>;
 
   // Actions
   setupTwoAccounts: (
@@ -355,7 +357,8 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Load user data: In online mode fetches from Supabase if online; in offline mode automatically populates from linked cloud first!
-  const refreshData = useCallback(async (uid: string) => {
+  const refreshData = useCallback(async (inputUid?: string) => {
+    const uid = inputUid || userId;
     if (!uid) return;
     try {
       const supabase = getSupabase();
@@ -390,19 +393,39 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             }
           }
 
-          // RECOVERY: Push any local transactions created on this device that failed to reach Supabase
-          // (Only truly active transactions that were never deleted)
+          // Read current sync queue to find local pending offline transactions
+          const currentQueue = await idbGetSyncQueue();
+          const pendingTxUpsertIds = new Set(
+            currentQueue
+              .filter((q) => q.table === 'transactions' && q.action === 'UPSERT')
+              .map((q) => (q.payload as { id: string })?.id)
+              .filter(Boolean)
+          );
+
+          // ANTI-RESURRECTION: Process local transactions
           for (const lt of localTxs) {
-            if (!remoteTxMap.has(lt.id) && !lt.is_deleted && !deletedTxIds.has(lt.id)) {
-              const { sync_status, ...cloudTx } = lt;
-              const { error: pushErr } = await supabase.from('transactions').upsert({
-                ...cloudTx,
-                user_id: uid,
-              }, { onConflict: 'id' });
-              if (!pushErr) {
-                remoteTxMap.set(lt.id, lt);
+            if (deletedTxIds.has(lt.id) || lt.is_deleted) {
+              await idbDeleteTransaction(lt.id, uid);
+              continue;
+            }
+
+            if (!remoteTxMap.has(lt.id)) {
+              if (lt.sync_status === 'pending' || pendingTxUpsertIds.has(lt.id)) {
+                // Legitimate local offline transaction that hasn't reached Supabase yet -> Push to Supabase!
+                const { sync_status, ...cloudTx } = lt;
+                const { error: pushErr } = await supabase.from('transactions').upsert({
+                  ...cloudTx,
+                  user_id: uid,
+                }, { onConflict: 'id' });
+                if (!pushErr) {
+                  remoteTxMap.set(lt.id, lt);
+                } else {
+                  console.warn('Could not auto-sync local transaction to Supabase:', pushErr);
+                }
               } else {
-                console.warn('Could not auto-sync local transaction to Supabase:', pushErr);
+                // Missing from remote Supabase and was already synced -> It was deleted on another device or in cloud!
+                // Delete locally to prevent ghost resurrection!
+                await idbDeleteTransaction(lt.id, uid);
               }
             }
           }
@@ -414,7 +437,6 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
             ...(await idbGetDeletedNoteIds(uid)),
             ...(await idbGetDeletedNoteIds(DEMO_USER_ID)),
           ]);
-          const currentQueue = await idbGetSyncQueue();
           currentQueue
             .filter((q) => q.table === 'financial_notes' && (q.action === 'DELETE' || (q.payload as { is_deleted?: boolean })?.is_deleted))
             .forEach((q) => {
@@ -615,7 +637,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
 
       // OFFLINE MODE: Always populate first with current cloud data before showing to user!
       if (uid === DEMO_USER_ID && supabase && navigator.onLine) {
-        let linkedUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') : null);
+        let linkedUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') || localStorage.getItem('sd_ledger_registered_user_id') : null);
 
         // Fallback: If not set in localStorage, check active Supabase auth session
         if (!linkedUid) {
@@ -637,7 +659,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
               ...(await idbGetDeletedTransactionIds(linkedUid)),
             ]);
 
-            const [accRes, txRes, recRes, logRes, notesRes, localTxs, localNotes, localQueue] = await Promise.all([
+            const [accRes, txRes, recRes, logRes, notesRes, localTxs, localNotes] = await Promise.all([
               supabase.from('accounts').select('*').eq('user_id', linkedUid).order('account_index', { ascending: true }),
               supabase.from('transactions').select('*').eq('user_id', linkedUid).order('transaction_date', { ascending: false }),
               supabase.from('reconciliations').select('*').eq('user_id', linkedUid).order('reconciled_date', { ascending: false }),
@@ -645,120 +667,97 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
               supabase.from('financial_notes').select('*').eq('user_id', linkedUid).order('created_at', { ascending: false }),
               idbGetTransactions(DEMO_USER_ID),
               idbGetNotes(DEMO_USER_ID),
-              idbGetSyncQueue(),
             ]);
 
-            if (accRes.data && accRes.data.length > 0) {
-              const remoteAccIds = new Set(accRes.data.map((a: Account) => a.id));
-              const localAccs = await idbGetAccounts(DEMO_USER_ID);
-              for (const la of localAccs) {
-                if (!remoteAccIds.has(la.id) && !localQueue.some((q) => q.payload?.id === la.id)) {
-                  await idbDeleteAccount(la.id, DEMO_USER_ID);
+            // Only update local store if queries succeeded without error
+            if (!accRes.error && !txRes.error) {
+              if (accRes.data) {
+                const remoteAccIds = new Set(accRes.data.map((a: Account) => a.id));
+                const localAccs = await idbGetAccounts(DEMO_USER_ID);
+                for (const la of localAccs) {
+                  if (!remoteAccIds.has(la.id)) {
+                    await idbDeleteAccount(la.id, DEMO_USER_ID);
+                  }
+                }
+
+                // Deduplicate by normalized name
+                const dedupMap = new Map<string, Account>();
+                for (const a of accRes.data as Account[]) {
+                  const key = a.display_name.trim().toLowerCase();
+                  if (!dedupMap.has(key)) {
+                    dedupMap.set(key, { ...a, user_id: DEMO_USER_ID });
+                  }
+                }
+
+                await idbSaveAccounts(Array.from(dedupMap.values()));
+              }
+
+              if (txRes.data) {
+                const remoteTxIds = new Set(txRes.data.map((t: Transaction) => t.id));
+                for (const lt of localTxs) {
+                  if (!remoteTxIds.has(lt.id)) {
+                    await idbDeleteTransaction(lt.id, DEMO_USER_ID);
+                  }
+                }
+
+                for (const rt of txRes.data as Transaction[]) {
+                  if (rt.is_deleted || deletedTxIds.has(rt.id)) {
+                    await idbDeleteTransaction(rt.id, DEMO_USER_ID);
+                  }
+                }
+
+                const remoteTxs: Transaction[] = (txRes.data as Transaction[])
+                  .filter((t) => !t.is_deleted && !deletedTxIds.has(t.id))
+                  .map((t: Transaction) => ({
+                    ...t,
+                    user_id: DEMO_USER_ID,
+                    sync_status: 'synced',
+                  }));
+
+                await idbSaveTransactions(remoteTxs);
+              }
+
+              if (recRes.data) {
+                for (const r of recRes.data) {
+                  await idbSaveReconciliation({ ...(r as Reconciliation), user_id: DEMO_USER_ID });
                 }
               }
 
-              // Deduplicate by normalized name
-              const dedupMap = new Map<string, Account>();
-              for (const a of accRes.data as Account[]) {
-                const key = a.display_name.trim().toLowerCase();
-                if (!dedupMap.has(key)) {
-                  dedupMap.set(key, { ...a, user_id: DEMO_USER_ID });
+              if (logRes.data) {
+                for (const l of logRes.data) {
+                  await idbSaveAuditLog({ ...(l as AuditLog), user_id: DEMO_USER_ID });
                 }
               }
 
-              await idbSaveAccounts(Array.from(dedupMap.values()));
-            }
+              if (notesRes.data) {
+                const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+                const remoteNoteIds = new Set(notesRes.data.map((n: FinancialNote) => n.id));
 
-            if (txRes.data) {
-              const remoteTxIds = new Set(txRes.data.map((t: Transaction) => t.id));
-              for (const lt of localTxs) {
-                if (
-                  !remoteTxIds.has(lt.id) &&
-                  lt.sync_status !== 'pending' &&
-                  !localQueue.some((q) => q.payload?.id === lt.id)
-                ) {
-                  await idbDeleteTransaction(lt.id, DEMO_USER_ID);
+                for (const ln of localNotes) {
+                  if (!remoteNoteIds.has(ln.id)) {
+                    await idbDeleteNote(ln.id, DEMO_USER_ID);
+                  }
                 }
+
+                const remoteNotes: FinancialNote[] = (notesRes.data as FinancialNote[])
+                  .filter((n) => {
+                    const isResolved = Boolean(n.is_resolved);
+                    const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
+                    return !(isResolved && resolvedTime < fiveDaysAgoMs);
+                  })
+                  .map((n: FinancialNote) => ({
+                    ...n,
+                    user_id: DEMO_USER_ID,
+                  }));
+
+                await idbSaveNotes(remoteNotes);
               }
 
-              // Process remote transactions, soft-deleting any that were marked deleted
-              for (const rt of txRes.data as Transaction[]) {
-                if (rt.is_deleted || deletedTxIds.has(rt.id)) {
-                  await idbDeleteTransaction(rt.id, DEMO_USER_ID);
-                }
+              // RULE 3: Clearing forgotten unpushed offline sync items upon fresh cloud sync
+              await idbClearSyncQueue();
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('sd_ledger_offline_changes_made', 'false');
               }
-
-              const remoteTxs: Transaction[] = (txRes.data as Transaction[])
-                .filter((t) => !t.is_deleted && !deletedTxIds.has(t.id))
-                .map((t: Transaction) => ({
-                  ...t,
-                  user_id: DEMO_USER_ID,
-                  sync_status: 'synced',
-                }));
-
-              // Preserve any pending local offline entries
-              const pendingLocalTxs = localTxs.filter(
-                (lt) =>
-                  !deletedTxIds.has(lt.id) &&
-                  !lt.is_deleted &&
-                  (lt.sync_status === 'pending' || localQueue.some((q) => q.payload?.id === lt.id))
-              );
-
-              const mergedTxs = new Map<string, Transaction>();
-              remoteTxs.forEach((rt) => mergedTxs.set(rt.id, rt));
-              pendingLocalTxs.forEach((pt) => mergedTxs.set(pt.id, pt));
-
-              await idbSaveTransactions(Array.from(mergedTxs.values()));
-            }
-
-            if (recRes.data) {
-              for (const r of recRes.data) {
-                await idbSaveReconciliation({ ...(r as Reconciliation), user_id: DEMO_USER_ID });
-              }
-            }
-
-            if (logRes.data) {
-              for (const l of logRes.data) {
-                await idbSaveAuditLog({ ...(l as AuditLog), user_id: DEMO_USER_ID });
-              }
-            }
-
-            if (notesRes.data) {
-              const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
-              const remoteNoteIds = new Set(notesRes.data.map((n: FinancialNote) => n.id));
-
-              for (const ln of localNotes) {
-                const isResolved = Boolean(ln.is_resolved);
-                const resolvedTime = new Date(ln.resolved_at || ln.updated_at || ln.created_at || 0).getTime();
-                const isExpired = isResolved && resolvedTime < fiveDaysAgoMs;
-
-                if (isExpired || (!remoteNoteIds.has(ln.id) && !localQueue.some((q) => q.payload?.id === ln.id))) {
-                  await idbDeleteNote(ln.id, DEMO_USER_ID);
-                }
-              }
-
-              const remoteNotes: FinancialNote[] = (notesRes.data as FinancialNote[])
-                .filter((n) => {
-                  const isResolved = Boolean(n.is_resolved);
-                  const resolvedTime = new Date(n.resolved_at || n.updated_at || n.created_at || 0).getTime();
-                  return !(isResolved && resolvedTime < fiveDaysAgoMs);
-                })
-                .map((n: FinancialNote) => ({
-                  ...n,
-                  user_id: DEMO_USER_ID,
-                }));
-
-              const pendingLocalNotes = localNotes.filter((ln) => {
-                const isResolved = Boolean(ln.is_resolved);
-                const resolvedTime = new Date(ln.resolved_at || ln.updated_at || ln.created_at || 0).getTime();
-                return !(isResolved && resolvedTime < fiveDaysAgoMs) && localQueue.some((q) => q.payload?.id === ln.id);
-              });
-
-              const mergedNotes = new Map<string, FinancialNote>();
-              remoteNotes.forEach((rn) => mergedNotes.set(rn.id, rn));
-              pendingLocalNotes.forEach((pn) => mergedNotes.set(pn.id, pn));
-
-              await idbSaveNotes(Array.from(mergedNotes.values()));
             }
 
             // Pull contacts & UPI for linked cloud user
@@ -813,11 +812,24 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         idbGetSyncQueue(),
       ]);
 
+      // RESOLVED NOTES CLEANUP AFTER 5 DAYS (Rule: Guaranteed clean up after 5 days even if user is not present for 5 days or offline)
+      const fiveDaysAgoMs = Date.now() - RESOLVED_NOTES_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+      const cleanNotes: FinancialNote[] = [];
+      for (const note of userNotes) {
+        const isResolved = Boolean(note.is_resolved);
+        const resolvedTime = new Date(note.resolved_at || note.updated_at || note.created_at || 0).getTime();
+        if (isResolved && resolvedTime < fiveDaysAgoMs) {
+          await idbHardDeleteNote(note.id);
+        } else {
+          cleanNotes.push(note);
+        }
+      }
+
       setAccounts(accs);
       setTransactions(txs);
       setReconciliations(recs);
       setAuditLogs(logs);
-      setNotes(userNotes);
+      setNotes(cleanNotes);
       setSyncStatus((prev) => ({
         ...prev,
         lastSyncedAt: lastSync || null,
@@ -828,21 +840,35 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       console.error('Failed to load local ledger data:', err);
       setIsInitialized(true);
     }
-  }, [linkedCloudUserId]);
+  }, [linkedCloudUserId, userId]);
 
   // Pull latest cloud data manually on demand
-  const pullLatestFromCloud = useCallback(async (): Promise<{ success: boolean; count: number; error?: string }> => {
+  const pullLatestFromCloud = useCallback(async (): Promise<{ success: boolean; count: number; requiresAuth?: boolean; error?: string }> => {
     if (!navigator.onLine) {
       const msg = 'Device is currently offline. Connect to the internet to pull cloud data.';
       setSyncMessage(msg);
       return { success: false, count: 0, error: msg };
     }
-    const targetUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') : null);
+    const targetUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') || localStorage.getItem('sd_ledger_registered_user_id') : null);
     if (!targetUid) {
-      const msg = 'No cloud account linked yet.';
+      const msg = 'No registered cloud account linked yet. Please sign in or register first.';
       setSyncMessage(msg);
-      return { success: false, count: 0, error: msg };
+      return { success: false, count: 0, requiresAuth: true, error: msg };
     }
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      return { success: false, count: 0, error: 'Supabase client not initialized.' };
+    }
+
+    // Verify session
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session || session.user.id !== targetUid) {
+      const authMsg = `Please sign in with ${linkedCloudAccount || 'your account'} to authenticate and pull cloud records.`;
+      setSyncMessage(authMsg);
+      return { success: false, count: 0, requiresAuth: true, error: authMsg };
+    }
+
     setSyncStatus((prev) => ({ ...prev, isSyncing: true }));
     try {
       await refreshData(DEMO_USER_ID);
@@ -1106,7 +1132,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       return { success: false, isOffline: true, message: offlineMsg };
     }
 
-    const targetUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') : null);
+    const targetUid = linkedCloudUserId || (typeof window !== 'undefined' ? localStorage.getItem('sd_ledger_linked_cloud_uid') || localStorage.getItem('sd_ledger_registered_user_id') : null);
     if (!targetUid) {
       const noLinkedMsg = 'No cloud account linked yet. Please import from your online account first.';
       setSyncMessage(noLinkedMsg);
@@ -1251,6 +1277,28 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [userId, syncStatus.pendingCount]);
+
+  // APP WAKE & TAB FOCUS LISTENER (Flaw B): Catch up with changes from other devices when waking/focusing
+  useEffect(() => {
+    let debounceWakeTimer: NodeJS.Timeout | null = null;
+    const handleWakeOrFocus = () => {
+      if (document.visibilityState === 'visible' && navigator.onLine && userId) {
+        if (debounceWakeTimer) clearTimeout(debounceWakeTimer);
+        debounceWakeTimer = setTimeout(() => {
+          refreshData(userId);
+        }, 1200);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleWakeOrFocus);
+    window.addEventListener('focus', handleWakeOrFocus);
+
+    return () => {
+      if (debounceWakeTimer) clearTimeout(debounceWakeTimer);
+      document.removeEventListener('visibilitychange', handleWakeOrFocus);
+      window.removeEventListener('focus', handleWakeOrFocus);
+    };
+  }, [userId, refreshData]);
 
   // User directly manages accounts through the single boilerplate card or Add Account modal
   const needsSetupWizard = false;
@@ -2784,6 +2832,7 @@ export function LedgerProvider({ children }: { children: React.ReactNode }) {
         uploadOfflineToCloud,
         pullLatestFromCloud,
         pushLocalDataToCloud,
+        refreshData,
         setupTwoAccounts,
         addAccount,
         deleteAccount,

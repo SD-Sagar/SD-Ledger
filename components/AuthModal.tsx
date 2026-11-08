@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useLedger } from '../context/LedgerContext';
 import {
   getSupabaseConfig,
   saveCustomSupabaseConfig,
@@ -48,6 +49,11 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
     continueAsDemo,
     signOut,
   } = useAuth();
+  const { pullLatestFromCloud } = useLedger();
+
+  const registeredEmail = typeof window !== 'undefined' ? (localStorage.getItem('sd_ledger_registered_user_email') || localStorage.getItem('sd_ledger_linked_cloud_email')) : null;
+  const registeredUid = typeof window !== 'undefined' ? (localStorage.getItem('sd_ledger_registered_user_id') || localStorage.getItem('sd_ledger_linked_cloud_uid')) : null;
+  const hasRegisteredAccount = Boolean(registeredUid || registeredEmail);
 
   const [activeTab, setActiveTab] = useState<TabType>(initialTab || 'signin');
   const [email, setEmail] = useState('');
@@ -91,6 +97,11 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
     const res = await signIn(email, password);
     setIsSubmitting(false);
     if (res.success) {
+      if (promptMessage && (promptMessage.toLowerCase().includes('offline') || promptMessage.toLowerCase().includes('switch'))) {
+        const savedUid = typeof window !== 'undefined' ? (localStorage.getItem('sd_ledger_registered_user_id') || localStorage.getItem('sd_ledger_linked_cloud_uid')) : null;
+        continueAsDemo(email, savedUid || undefined);
+        await pullLatestFromCloud();
+      }
       onClose();
     }
   };
@@ -314,26 +325,31 @@ export function AuthModal({ isOpen, onClose, promptMessage, initialTab }: AuthMo
               <ArrowRight className="h-4 w-4" />
             </button>
 
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-zinc-800"></div>
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-zinc-950 px-2 text-zinc-500">or offline mode</span>
-              </div>
-            </div>
+            {/* OFFLINE MODE: Rule 1 - User needs to add or register an online account first */}
+            {hasRegisteredAccount && (
+              <>
+                <div className="relative my-4">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-zinc-800"></div>
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-zinc-950 px-2 text-zinc-500">or offline mode</span>
+                  </div>
+                </div>
 
-            <button
-              type="button"
-              onClick={() => {
-                continueAsDemo();
-                onClose();
-              }}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
-            >
-              <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-              <span>Continue in Local Offline Mode</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    continueAsDemo(registeredEmail || undefined, registeredUid || undefined);
+                    onClose();
+                  }}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg border border-zinc-800 bg-zinc-900/70 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition-colors"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                  <span>Continue in Offline Mode {registeredEmail ? `(${registeredEmail})` : ''}</span>
+                </button>
+              </>
+            )}
           </form>
         )}
 
